@@ -4,18 +4,19 @@ A GoLang REST API that simulates a 4-team football league with Premier League sc
 
 ## 🏗️ Architecture
 
-Built using **strict interface-based design** and **struct composition**. External systems (Weather, Match Simulation) are implemented as **Adapters** so the core simulation logic remains pure and testable.
+Built using **strict interface-based design** and **struct composition**. External systems (Weather, Match Simulation) are implemented as **Adapters** so they can be swapped for real external APIs. Currently, they use internal generation to avoid rate limits, keeping the core simulation logic pure and testable.
 
 ```
 insider/
-├── main.go                    # Entry point, DI wiring
+├── .github/workflows/         # CI/CD GitHub Actions pipelines
+├── main.go                    # Entry point, Graceful Shutdown, DI wiring
 ├── models/
 │   ├── team.go                # Team struct & TeamRepository interface
 │   ├── player.go              # Player struct & PlayerRepository interface
 │   └── match.go               # Match, MatchEvent, Standing & repository interfaces
 ├── database/
-│   ├── schema.sql             # SQL schema (5 tables, embedded)
-│   ├── db.go                  # DB connection & init
+│   ├── migrations/            # golang-migrate up/down SQL scripts
+│   ├── db.go                  # DB connection & auto-migration via embed.FS
 │   ├── seed.go                # Teams, players, standings, schedule seeding
 │   ├── team_repo.go           # TeamRepository impl
 │   ├── player_repo.go         # PlayerRepository impl
@@ -23,6 +24,8 @@ insider/
 │   ├── event_repo.go          # MatchEventRepository impl
 │   └── standing_repo.go       # StandingRepository impl (with recalculation)
 ├── services/
+│   ├── event_bus.go           # Internal Pub/Sub channel-based bus
+│   ├── listeners.go           # Asynchronous event consumers
 │   ├── league.go              # LeagueService, MatchEngine, WeatherAdapter interfaces
 │   ├── league_impl.go         # Core league logic (play, edit, rollback, predict)
 │   ├── match_engine.go        # Poisson-based match simulator (Adapter)
@@ -38,25 +41,26 @@ insider/
 
 | Component | Technology |
 |-----------|-----------|
-| Language | Go 1.26 |
+| Language | Go 1.26+ |
 | HTTP Router | gorilla/mux |
 | Database | SQLite (go-sqlite3) |
-| Architecture | Interface-based, Adapter pattern, DI |
+| Architecture | Interface-based, Adapter pattern, Pub/Sub, DI |
+| CI/CD | GitHub Actions |
+| Migrations | golang-migrate |
 
-## 🚀 Setup & Run
+Includes API middleware for structured JSON logging (slog), panic recovery, and rate limiting (golang.org/x/time/rate).
 
-### Prerequisites
-- Go 1.21+
-- GCC (for CGO/SQLite)
-
-### Quick Start
+## 🐳 Docker Deployment (Recommended)
+This project is fully containerized. Use the provided Docker Compose file to spin up the application and database volume.
 ```bash
-cd insider
-go mod tidy
-go build -o league-simulation.exe .
-./league-simulation.exe
-# → http://localhost:8080
+make docker-run  # Wraps docker-compose up --build -d
 ```
+Interactive OpenAPI 3.0 documentation is available at http://localhost:8080/swagger/index.html when running locally.
+
+## 🧪 Testing & QA
+- **Table-Driven Tests:** Core simulation logic is validated using Go's idiomatic table-driven test patterns.
+- **Mocking:** `WeatherAdapter` and `MatchRepository` are mocked using `testify/mock` to isolate the `MatchEngine` during unit testing.
+- Run tests via: `make test` or `go test ./... -v`
 
 ### Environment Variables
 | Variable | Default | Description |
@@ -77,7 +81,7 @@ go build -o league-simulation.exe .
 | `GET` | `/api/v1/teams/{id}/metrics` | Returns a team's current Strength, Morale, Fatigue, and Market Value. |
 | `POST` | `/api/v1/league/reset` | Resets the entire league to initial state. |
 
-## 🗄 SQL Schema
+## 🗄 SQL Schema & Queries
 
 5 tables matching the schema requirements:
 
@@ -87,6 +91,17 @@ go build -o league-simulation.exe .
 -- matches: id, week, home_team_id, away_team_id, home_score, away_score, weather_condition, status
 -- match_events: id, match_id, player_id, event_type, minute, detail
 -- standings: team_id, played, won, drawn, lost, gf, ga, gd, points
+```
+
+Complex SQL queries are located in `database/standing_repo.go` and `database/match_repo.go`. Here is an example of the Standings Upsert query which recalculates the dynamic league table:
+
+```sql
+INSERT INTO standings (team_id, played, won, drawn, lost, gf, ga, gd, points)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+ON CONFLICT(team_id) DO UPDATE SET
+    played=excluded.played, won=excluded.won, drawn=excluded.drawn,
+    lost=excluded.lost, gf=excluded.gf, ga=excluded.ga, gd=excluded.gd,
+    points=excluded.points
 ```
 
 ## ⚽ Simulation Features
@@ -99,14 +114,14 @@ go build -o league-simulation.exe .
 - **Home advantage** (25% boost)
 
 ### Weather System
-- Weather generated per match based on home city
+- Weather generated per match based on home city (Implemented as an Adapter, easily swappable for OpenWeatherMap API)
 - Conditions: ☀️ Sunny, 🌧️ Rainy, ❄️ Snowy, 💨 Windy, 🌫️ Foggy
 - Manchester/Liverpool: more rain; London: more variety
 - Weather affects goal expectations
 
 ### Match Events
 - ⚽ Goals with random minute
-- 🔴 Quantum VAR Decisions (5% chance per match)
+- 🔴 Quantum VAR Decisions (5% chance per match, mock internal generator instead of external Quantum API to avoid rate limits)
 - 🩹 Injuries (10% chance per match)
 
 ### Dynamic Team Metrics
@@ -116,7 +131,7 @@ go build -o league-simulation.exe .
 
 ### 🔮 Oracle (Monte Carlo Predictions)
 - Available after week 4
-- Runs **1,000 simulations** of remaining matches
+- Runs **1,000 simulations concurrently** utilizing Go worker pools and channels for millisecond-level parallel execution without race conditions.
 - Returns championship probability per team
 
 ### ⏪ Time Machine (Rollback)
@@ -124,6 +139,14 @@ go build -o league-simulation.exe .
 - Resets matches from that week onward to "scheduled"
 - Deletes associated events
 - Recalculates standings and team metrics
+
+## 🚀 Advanced Enterprise Features
+
+- **Graceful Server Shutdown**: Intercepts `SIGTERM` and `SIGINT` signals, halts new incoming traffic, finishes active requests up to a 10-second context timeout, and safely closes the database connection to prevent WAL corruption.
+- **Internal Event-Driven Architecture (Pub/Sub)**: `MatchEngine` is decoupled from persistence. It publishes `MatchFinishedEvent` to a channel-based `EventBus`. Independent background listeners consume these events to asynchronously recalculate standings and update morale/fatigue.
+- **Oracle Response Caching**: The CPU-heavy `/oracle` Monte Carlo endpoint is guarded by a thread-safe `sync.RWMutex` in-memory cache, achieving 0ms latency on repeated calls. The cache is surgically invalidated upon any league state mutation (match played, rollback, reset).
+- **Database Migrations (`golang-migrate`)**: Migrated away from raw startup scripts. Employs versioned `.up.sql` and `.down.sql` schemas, executed seamlessly on startup utilizing Go's `embed.FS` and `migrate/v4`.
+- **Continuous Integration**: Powered by `.github/workflows/ci.yml`. On every push or PR, GitHub Actions automatically provisions Go, runs `go fmt`, `go vet`, executes table-driven unit tests with `testify/mock`, and validates the Docker build context.
 
 ## 🏟️ Default Teams
 

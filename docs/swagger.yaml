@@ -1,0 +1,172 @@
+basePath: /api/v1
+definitions:
+  models.TeamMetrics:
+    properties:
+      base_strength:
+        type: integer
+      city:
+        type: string
+      current_strength:
+        type: integer
+      fatigue:
+        type: number
+      market_value:
+        type: number
+      morale:
+        type: number
+      team_id:
+        type: integer
+      team_name:
+        type: string
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: This is a sophisticated league simulation API with Monte Carlo predictions
+    and Time Machine rollback.
+  title: Football League Simulation API
+  version: "1.0"
+paths:
+  /league/next-week:
+    post:
+      description: Simulates the next week's matches and updates state
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Simulate next week
+      tags:
+      - league
+  /league/play-all:
+    post:
+      description: Simulates all remaining matches in the season
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Play all remaining weeks
+      tags:
+      - league
+  /league/reset:
+    post:
+      description: Resets the entire league to initial state
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties:
+              type: string
+            type: object
+      summary: Reset league
+      tags:
+      - league
+  /league/rollback/{week}:
+    post:
+      description: Reverts database state to a specific week
+      parameters:
+      - description: Week to rollback to
+        in: path
+        name: week
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Time Machine rollback
+      tags:
+      - league
+  /league/table:
+    get:
+      description: Returns current league standings (PTS, W, D, L, GD)
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Get current standings
+      tags:
+      - league
+  /matches/{id}:
+    put:
+      consumes:
+      - application/json
+      description: Edits a specific match result; recalculates standings and morale
+      parameters:
+      - description: Match ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      - description: 'Scores: {home_score: 1, away_score: 2}'
+        in: body
+        name: body
+        required: true
+        schema:
+          additionalProperties:
+            type: integer
+          type: object
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Edit match result
+      tags:
+      - matches
+  /simulation/oracle:
+    get:
+      description: Runs 1,000 Monte Carlo simulations to calculate Championship Win
+        %
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Monte Carlo predictions
+      tags:
+      - simulation
+  /teams/{id}/metrics:
+    get:
+      description: Returns a team's current Strength, Morale, Fatigue, and Market
+        Value
+      parameters:
+      - description: Team ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.TeamMetrics'
+      summary: Get team metrics
+      tags:
+      - teams
+swagger: "2.0"

@@ -2,15 +2,18 @@ package database
 
 import (
 	"database/sql"
-	_ "embed"
+	"embed"
 	"fmt"
 	"log"
 
+	"github.com/golang-migrate/migrate/v4"
+	"github.com/golang-migrate/migrate/v4/database/sqlite3"
+	"github.com/golang-migrate/migrate/v4/source/iofs"
 	_ "github.com/mattn/go-sqlite3"
 )
 
-//go:embed schema.sql
-var schemaSQL string
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
 
 // DB wraps the sql.DB connection
 type DB struct {
@@ -38,10 +41,28 @@ func NewDB(dbPath string) (*DB, error) {
 	return db, nil
 }
 
-// initSchema creates tables if they don't exist
+// initSchema runs database migrations using golang-migrate
 func (db *DB) initSchema() error {
-	_, err := db.Conn.Exec(schemaSQL)
-	return err
+	sourceDriver, err := iofs.New(migrationsFS, "migrations")
+	if err != nil {
+		return fmt.Errorf("failed to create migration source: %w", err)
+	}
+
+	dbDriver, err := sqlite3.WithInstance(db.Conn, &sqlite3.Config{})
+	if err != nil {
+		return fmt.Errorf("failed to create database driver: %w", err)
+	}
+
+	m, err := migrate.NewWithInstance("iofs", sourceDriver, "sqlite3", dbDriver)
+	if err != nil {
+		return fmt.Errorf("failed to initialize migrate instance: %w", err)
+	}
+
+	if err := m.Up(); err != nil && err != migrate.ErrNoChange {
+		return fmt.Errorf("failed to run migrations up: %w", err)
+	}
+
+	return nil
 }
 
 // Close closes the database connection

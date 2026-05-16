@@ -5,6 +5,8 @@ import (
 
 	"github.com/gorilla/mux"
 	"github.com/insider/league-simulation/handlers"
+	"github.com/insider/league-simulation/middleware"
+	httpSwagger "github.com/swaggo/http-swagger"
 )
 
 // NewRouter creates the HTTP router with all /api/v1 endpoints
@@ -23,6 +25,9 @@ func NewRouter(handler *handlers.LeagueHandler) *mux.Router {
 	// POST /api/v1/league/play-all — Play all remaining weeks
 	v1.HandleFunc("/league/play-all", handler.PlayAll).Methods(http.MethodPost)
 
+	// GET  /api/v1/matches/{id} — Get match
+	v1.HandleFunc("/matches/{id}", handler.GetMatch).Methods(http.MethodGet)
+
 	// PUT  /api/v1/matches/{id} — Edit match result
 	v1.HandleFunc("/matches/{id}", handler.EditMatch).Methods(http.MethodPut)
 
@@ -40,6 +45,14 @@ func NewRouter(handler *handlers.LeagueHandler) *mux.Router {
 
 	// CORS middleware
 	r.Use(corsMiddleware)
+	
+	// Enterprise Middlewares
+	r.Use(middleware.PanicRecoveryMiddleware)
+	r.Use(middleware.LoggingMiddleware)
+	r.Use(middleware.RateLimiterMiddleware)
+
+	// Swagger documentation route
+	r.PathPrefix("/swagger/").Handler(httpSwagger.WrapHandler)
 
 	return r
 }

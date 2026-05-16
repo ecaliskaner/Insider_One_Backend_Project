@@ -7,12 +7,34 @@ import (
 	"github.com/insider/league-simulation/models"
 )
 
+// RNG defines an interface for random number generation to allow deterministic testing
+type RNG interface {
+	Float64() float64
+	Intn(n int) int
+}
+
+// defaultRNG wraps math/rand to implement the RNG interface
+type defaultRNG struct{}
+
+func (d *defaultRNG) Float64() float64 { return rand.Float64() }
+func (d *defaultRNG) Intn(n int) int   { return rand.Intn(n) }
+
 // DefaultMatchEngine implements MatchEngine with strength/morale/fatigue/weather-based simulation.
 // Acts as an Adapter — the core simulation logic is pure and testable.
-type DefaultMatchEngine struct{}
+type DefaultMatchEngine struct {
+	rng RNG
+}
 
 func NewMatchEngine() *DefaultMatchEngine {
-	return &DefaultMatchEngine{}
+	return &DefaultMatchEngine{
+		rng: &defaultRNG{},
+	}
+}
+
+func NewMatchEngineWithRNG(rng RNG) *DefaultMatchEngine {
+	return &DefaultMatchEngine{
+		rng: rng,
+	}
 }
 
 // SimulateMatch generates realistic match results and events.
@@ -32,8 +54,8 @@ func (e *DefaultMatchEngine) SimulateMatch(home, away models.Team, weather strin
 	homeExpected := baseGoals * (homeEffective / 70.0) * homeAdvantage * weatherMod
 	awayExpected := baseGoals * (awayEffective / 70.0) * weatherMod
 
-	homeGoals := poissonRandom(homeExpected)
-	awayGoals := poissonRandom(awayExpected)
+	homeGoals := e.poissonRandom(homeExpected)
+	awayGoals := e.poissonRandom(awayExpected)
 
 	if homeGoals > 7 {
 		homeGoals = 7
@@ -49,23 +71,23 @@ func (e *DefaultMatchEngine) SimulateMatch(home, away models.Team, weather strin
 	for i := 0; i < homeGoals; i++ {
 		events = append(events, models.MatchEvent{
 			EventType: "Goal",
-			Minute:    rand.Intn(90) + 1,
+			Minute:    e.rng.Intn(90) + 1,
 			Detail:    home.Name + " scores",
 		})
 	}
 	for i := 0; i < awayGoals; i++ {
 		events = append(events, models.MatchEvent{
 			EventType: "Goal",
-			Minute:    rand.Intn(90) + 1,
+			Minute:    e.rng.Intn(90) + 1,
 			Detail:    away.Name + " scores",
 		})
 	}
 
 	// Quantum VAR Decision (5% chance per match)
-	if rand.Float64() < 0.05 {
-		minute := rand.Intn(90) + 1
+	if e.rng.Float64() < 0.05 {
+		minute := e.rng.Intn(90) + 1
 		decision := "Goal overturned"
-		if rand.Float64() < 0.5 {
+		if e.rng.Float64() < 0.5 {
 			decision = "Penalty awarded"
 		}
 		events = append(events, models.MatchEvent{
@@ -76,10 +98,10 @@ func (e *DefaultMatchEngine) SimulateMatch(home, away models.Team, weather strin
 	}
 
 	// Injury event (10% chance per match)
-	if rand.Float64() < 0.10 {
+	if e.rng.Float64() < 0.10 {
 		events = append(events, models.MatchEvent{
 			EventType: "Injury",
-			Minute:    rand.Intn(90) + 1,
+			Minute:    e.rng.Intn(90) + 1,
 			Detail:    "Player injury during match",
 		})
 	}
@@ -104,13 +126,14 @@ func weatherModifier(weather string) float64 {
 }
 
 // poissonRandom generates a Poisson-distributed random number (Knuth's algorithm)
-func poissonRandom(lambda float64) int {
+// We pass RNG into it so it's deterministic in tests
+func (e *DefaultMatchEngine) poissonRandom(lambda float64) int {
 	l := math.Exp(-lambda)
 	k := 0
 	p := 1.0
 	for {
 		k++
-		p *= rand.Float64()
+		p *= e.rng.Float64()
 		if p < l {
 			break
 		}

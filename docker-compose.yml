@@ -1,0 +1,17 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: league-simulation-api
+    ports:
+      - "8080:8080"
+    volumes:
+      - league_data:/app/data
+    environment:
+      - PORT=8080
+      - DB_PATH=/app/data/league.db
+    restart: unless-stopped
+
+volumes:
+  league_data:

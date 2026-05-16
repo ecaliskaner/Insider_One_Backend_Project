@@ -29,8 +29,13 @@ func respondError(w http.ResponseWriter, status int, message string) {
 	respondJSON(w, status, map[string]string{"error": message})
 }
 
-// GetTable — GET /api/v1/league/table
-// Returns current standings (PTS, W, D, L, GD)
+// GetTable godoc
+// @Summary      Get current standings
+// @Description  Returns current league standings (PTS, W, D, L, GD)
+// @Tags         league
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Router       /league/table [get]
 func (h *LeagueHandler) GetTable(w http.ResponseWriter, r *http.Request) {
 	standings, err := h.service.GetStandings()
 	if err != nil {
@@ -44,8 +49,13 @@ func (h *LeagueHandler) GetTable(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// PlayNextWeek — POST /api/v1/league/next-week
-// Simulates the next week's matches and updates state
+// PlayNextWeek godoc
+// @Summary      Simulate next week
+// @Description  Simulates the next week's matches and updates state
+// @Tags         league
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Router       /league/next-week [post]
 func (h *LeagueHandler) PlayNextWeek(w http.ResponseWriter, r *http.Request) {
 	result, err := h.service.PlayNextWeek()
 	if err != nil {
@@ -62,8 +72,13 @@ func (h *LeagueHandler) PlayNextWeek(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// PlayAll — POST /api/v1/league/play-all
-// Simulates all remaining matches in the season
+// PlayAll godoc
+// @Summary      Play all remaining weeks
+// @Description  Simulates all remaining matches in the season
+// @Tags         league
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Router       /league/play-all [post]
 func (h *LeagueHandler) PlayAll(w http.ResponseWriter, r *http.Request) {
 	results, err := h.service.PlayAll()
 	if err != nil {
@@ -78,8 +93,44 @@ func (h *LeagueHandler) PlayAll(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// EditMatch — PUT /api/v1/matches/{id}
-// Edits a specific match result; recalculates standings and morale
+// GetMatch godoc
+// @Summary      Get match details
+// @Description  Returns a specific match and its events
+// @Tags         matches
+// @Produce      json
+// @Param        id   path      int  true  "Match ID"
+// @Success      200  {object}  map[string]interface{}
+// @Router       /matches/{id} [get]
+func (h *LeagueHandler) GetMatch(w http.ResponseWriter, r *http.Request) {
+	vars := mux.Vars(r)
+	matchID, err := strconv.Atoi(vars["id"])
+	if err != nil {
+		respondError(w, http.StatusBadRequest, "invalid match ID")
+		return
+	}
+
+	match, events, err := h.service.GetMatch(matchID)
+	if err != nil {
+		respondError(w, http.StatusNotFound, err.Error())
+		return
+	}
+
+	respondJSON(w, http.StatusOK, map[string]interface{}{
+		"match":  match,
+		"events": events,
+	})
+}
+
+// EditMatch godoc
+// @Summary      Edit match result
+// @Description  Edits a specific match result; recalculates standings and morale
+// @Tags         matches
+// @Accept       json
+// @Produce      json
+// @Param        id   path      int  true  "Match ID"
+// @Param        body body      map[string]int true "Scores: {home_score: 1, away_score: 2}"
+// @Success      200  {object}  map[string]interface{}
+// @Router       /matches/{id} [put]
 func (h *LeagueHandler) EditMatch(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	matchID, err := strconv.Atoi(vars["id"])
@@ -111,8 +162,13 @@ func (h *LeagueHandler) EditMatch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetOracle — GET /api/v1/simulation/oracle
-// Runs 1,000 Monte Carlo simulations to calculate Championship Win %
+// GetOracle godoc
+// @Summary      Monte Carlo predictions
+// @Description  Runs 1,000 Monte Carlo simulations to calculate Championship Win %
+// @Tags         simulation
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Router       /simulation/oracle [get]
 func (h *LeagueHandler) GetOracle(w http.ResponseWriter, r *http.Request) {
 	predictions, err := h.service.GetPredictions()
 	if err != nil {
@@ -127,8 +183,14 @@ func (h *LeagueHandler) GetOracle(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Rollback — POST /api/v1/league/rollback/{week}
-// Time Machine: Reverts database state to a specific week
+// Rollback godoc
+// @Summary      Time Machine rollback
+// @Description  Reverts database state to a specific week
+// @Tags         league
+// @Produce      json
+// @Param        week path      int  true  "Week to rollback to"
+// @Success      200  {object}  map[string]interface{}
+// @Router       /league/rollback/{week} [post]
 func (h *LeagueHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	week, err := strconv.Atoi(vars["week"])
@@ -151,8 +213,14 @@ func (h *LeagueHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetTeamMetrics — GET /api/v1/teams/{id}/metrics
-// Returns a team's current Strength, Morale, Fatigue, and Market Value
+// GetTeamMetrics godoc
+// @Summary      Get team metrics
+// @Description  Returns a team's current Strength, Morale, Fatigue, and Market Value
+// @Tags         teams
+// @Produce      json
+// @Param        id   path      int  true  "Team ID"
+// @Success      200  {object}  models.TeamMetrics
+// @Router       /teams/{id}/metrics [get]
 func (h *LeagueHandler) GetTeamMetrics(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	teamID, err := strconv.Atoi(vars["id"])
@@ -170,7 +238,13 @@ func (h *LeagueHandler) GetTeamMetrics(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, metrics)
 }
 
-// Reset — POST /api/v1/league/reset
+// Reset godoc
+// @Summary      Reset league
+// @Description  Resets the entire league to initial state
+// @Tags         league
+// @Produce      json
+// @Success      200  {object}  map[string]string
+// @Router       /league/reset [post]
 func (h *LeagueHandler) Reset(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.Reset(); err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())

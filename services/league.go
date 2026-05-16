@@ -14,6 +14,9 @@ type LeagueService interface {
 	// PlayAll simulates all remaining matches in the season
 	PlayAll() ([]models.WeekResult, error)
 
+	// GetMatch retrieves a match and its events
+	GetMatch(matchID int) (*models.Match, []models.MatchEvent, error)
+
 	// EditMatch edits a specific match result; recalculates standings and morale
 	EditMatch(matchID int, homeScore int, awayScore int) (*models.Match, error)
 
