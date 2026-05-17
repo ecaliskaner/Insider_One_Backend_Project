@@ -19,14 +19,31 @@ func NewLeagueHandler(service services.LeagueService) *LeagueHandler {
 	return &LeagueHandler{service: service}
 }
 
-func respondJSON(w http.ResponseWriter, status int, data interface{}) {
+// APIResponse standardizes all HTTP JSON responses
+type APIResponse struct {
+	Success bool        `json:"success"`
+	Data    interface{} `json:"data,omitempty"`
+	Error   string      `json:"error,omitempty"`
+	Meta    interface{} `json:"meta,omitempty"`
+}
+
+func respondJSON(w http.ResponseWriter, status int, data interface{}, meta interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(data)
+	json.NewEncoder(w).Encode(APIResponse{
+		Success: true,
+		Data:    data,
+		Meta:    meta,
+	})
 }
 
 func respondError(w http.ResponseWriter, status int, message string) {
-	respondJSON(w, status, map[string]string{"error": message})
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(status)
+	json.NewEncoder(w).Encode(APIResponse{
+		Success: false,
+		Error:   message,
+	})
 }
 
 // GetTable godoc
@@ -37,15 +54,14 @@ func respondError(w http.ResponseWriter, status int, message string) {
 // @Success      200  {object}  map[string]interface{}
 // @Router       /league/table [get]
 func (h *LeagueHandler) GetTable(w http.ResponseWriter, r *http.Request) {
-	standings, err := h.service.GetStandings()
+	standings, err := h.service.GetStandings(r.Context())
 	if err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	currentWeek, _ := h.service.GetCurrentWeek()
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	currentWeek, _ := h.service.GetCurrentWeek(r.Context())
+	respondJSON(w, http.StatusOK, standings, map[string]interface{}{
 		"current_week": currentWeek,
-		"standings":    standings,
 	})
 }
 
@@ -57,16 +73,15 @@ func (h *LeagueHandler) GetTable(w http.ResponseWriter, r *http.Request) {
 // @Success      200  {object}  map[string]interface{}
 // @Router       /league/next-week [post]
 func (h *LeagueHandler) PlayNextWeek(w http.ResponseWriter, r *http.Request) {
-	result, err := h.service.PlayNextWeek()
+	result, err := h.service.PlayNextWeek(r.Context())
 	if err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	standings, _ := h.service.GetStandings()
-	currentWeek, _ := h.service.GetCurrentWeek()
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	standings, _ := h.service.GetStandings(r.Context())
+	currentWeek, _ := h.service.GetCurrentWeek(r.Context())
+	respondJSON(w, http.StatusOK, result, map[string]interface{}{
 		"message":      "Week simulated successfully",
-		"week_result":  result,
 		"standings":    standings,
 		"current_week": currentWeek,
 	})
@@ -80,15 +95,14 @@ func (h *LeagueHandler) PlayNextWeek(w http.ResponseWriter, r *http.Request) {
 // @Success      200  {object}  map[string]interface{}
 // @Router       /league/play-all [post]
 func (h *LeagueHandler) PlayAll(w http.ResponseWriter, r *http.Request) {
-	results, err := h.service.PlayAll()
+	results, err := h.service.PlayAll(r.Context())
 	if err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	standings, _ := h.service.GetStandings()
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	standings, _ := h.service.GetStandings(r.Context())
+	respondJSON(w, http.StatusOK, results, map[string]interface{}{
 		"message":   "All remaining weeks simulated",
-		"results":   results,
 		"standings": standings,
 	})
 }
@@ -109,7 +123,7 @@ func (h *LeagueHandler) GetMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	match, events, err := h.service.GetMatch(matchID)
+	match, events, err := h.service.GetMatch(r.Context(), matchID)
 	if err != nil {
 		respondError(w, http.StatusNotFound, err.Error())
 		return
@@ -118,7 +132,7 @@ func (h *LeagueHandler) GetMatch(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]interface{}{
 		"match":  match,
 		"events": events,
-	})
+	}, nil)
 }
 
 // EditMatch godoc
@@ -148,16 +162,15 @@ func (h *LeagueHandler) EditMatch(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	match, err := h.service.EditMatch(matchID, req.HomeScore, req.AwayScore)
+	match, err := h.service.EditMatch(r.Context(), matchID, req.HomeScore, req.AwayScore)
 	if err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	standings, _ := h.service.GetStandings()
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	standings, _ := h.service.GetStandings(r.Context())
+	respondJSON(w, http.StatusOK, match, map[string]interface{}{
 		"message":   "Match updated, standings and morale recalculated",
-		"match":     match,
 		"standings": standings,
 	})
 }
@@ -170,15 +183,14 @@ func (h *LeagueHandler) EditMatch(w http.ResponseWriter, r *http.Request) {
 // @Success      200  {object}  map[string]interface{}
 // @Router       /simulation/oracle [get]
 func (h *LeagueHandler) GetOracle(w http.ResponseWriter, r *http.Request) {
-	predictions, err := h.service.GetPredictions()
+	predictions, err := h.service.GetPredictions(r.Context())
 	if err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
-	standings, _ := h.service.GetStandings()
-	respondJSON(w, http.StatusOK, map[string]interface{}{
-		"simulation_count": 1000,
-		"predictions":      predictions,
+	standings, _ := h.service.GetStandings(r.Context())
+	respondJSON(w, http.StatusOK, predictions, map[string]interface{}{
+		"simulation_count":  1000,
 		"current_standings": standings,
 	})
 }
@@ -199,14 +211,14 @@ func (h *LeagueHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.Rollback(week); err != nil {
+	if err := h.service.Rollback(r.Context(), week); err != nil {
 		respondError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 
-	standings, _ := h.service.GetStandings()
-	currentWeek, _ := h.service.GetCurrentWeek()
-	respondJSON(w, http.StatusOK, map[string]interface{}{
+	standings, _ := h.service.GetStandings(r.Context())
+	currentWeek, _ := h.service.GetCurrentWeek(r.Context())
+	respondJSON(w, http.StatusOK, nil, map[string]interface{}{
 		"message":      fmt.Sprintf("Time machine: reverted to week %d", week),
 		"current_week": currentWeek,
 		"standings":    standings,
@@ -229,13 +241,13 @@ func (h *LeagueHandler) GetTeamMetrics(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	metrics, err := h.service.GetTeamMetrics(teamID)
+	metrics, err := h.service.GetTeamMetrics(r.Context(), teamID)
 	if err != nil {
 		respondError(w, http.StatusNotFound, err.Error())
 		return
 	}
 
-	respondJSON(w, http.StatusOK, metrics)
+	respondJSON(w, http.StatusOK, metrics, nil)
 }
 
 // Reset godoc
@@ -246,11 +258,11 @@ func (h *LeagueHandler) GetTeamMetrics(w http.ResponseWriter, r *http.Request) {
 // @Success      200  {object}  map[string]string
 // @Router       /league/reset [post]
 func (h *LeagueHandler) Reset(w http.ResponseWriter, r *http.Request) {
-	if err := h.service.Reset(); err != nil {
+	if err := h.service.Reset(r.Context()); err != nil {
 		respondError(w, http.StatusInternalServerError, err.Error())
 		return
 	}
-	respondJSON(w, http.StatusOK, map[string]string{
+	respondJSON(w, http.StatusOK, nil, map[string]string{
 		"message": "League reset successfully",
 	})
 }

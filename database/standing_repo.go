@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"sort"
 
@@ -16,8 +17,8 @@ func NewStandingRepo(db *sql.DB) *StandingRepo {
 	return &StandingRepo{db: db}
 }
 
-func (r *StandingRepo) GetAll() ([]models.Standing, error) {
-	rows, err := r.db.Query(`
+func (r *StandingRepo) GetAll(ctx context.Context) ([]models.Standing, error) {
+	rows, err := r.db.QueryContext(ctx, `
 		SELECT s.team_id, t.name, s.played, s.won, s.drawn, s.lost, s.gf, s.ga, s.gd, s.points
 		FROM standings s
 		JOIN teams t ON s.team_id = t.id
@@ -39,7 +40,7 @@ func (r *StandingRepo) GetAll() ([]models.Standing, error) {
 	}
 
 	// Apply Premier League Head-to-Head Tiebreakers
-	matches, err := r.getAllPlayedMatches()
+	matches, err := r.getAllPlayedMatches(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -48,8 +49,8 @@ func (r *StandingRepo) GetAll() ([]models.Standing, error) {
 }
 
 // getAllPlayedMatches fetches matches needed for tiebreaker calculations
-func (r *StandingRepo) getAllPlayedMatches() ([]models.Match, error) {
-	rows, err := r.db.Query(`
+func (r *StandingRepo) getAllPlayedMatches(ctx context.Context) ([]models.Match, error) {
+	rows, err := r.db.QueryContext(ctx, `
 		SELECT id, home_team_id, away_team_id, home_score, away_score, status 
 		FROM matches 
 		WHERE status='played' OR status='edited'`)
@@ -174,8 +175,8 @@ func (r *StandingRepo) sortTiedGroup(group []*models.Standing, matches []models.
 	})
 }
 
-func (r *StandingRepo) Upsert(standing *models.Standing) error {
-	_, err := r.db.Exec(`
+func (r *StandingRepo) Upsert(ctx context.Context, standing *models.Standing) error {
+	_, err := r.db.ExecContext(ctx, `
 		INSERT INTO standings (team_id, played, won, drawn, lost, gf, ga, gd, points)
 		VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
 		ON CONFLICT(team_id) DO UPDATE SET
@@ -188,15 +189,15 @@ func (r *StandingRepo) Upsert(standing *models.Standing) error {
 	return err
 }
 
-func (r *StandingRepo) DeleteAll() error {
-	_, err := r.db.Exec("DELETE FROM standings")
+func (r *StandingRepo) DeleteAll(ctx context.Context) error {
+	_, err := r.db.ExecContext(ctx, "DELETE FROM standings")
 	return err
 }
 
 // RecalculateAll recomputes standings from all played matches
-func (r *StandingRepo) RecalculateAll(matches []models.Match) error {
+func (r *StandingRepo) RecalculateAll(ctx context.Context, matches []models.Match) error {
 	// Reset all standings
-	_, err := r.db.Exec("UPDATE standings SET played=0, won=0, drawn=0, lost=0, gf=0, ga=0, gd=0, points=0")
+	_, err := r.db.ExecContext(ctx, "UPDATE standings SET played=0, won=0, drawn=0, lost=0, gf=0, ga=0, gd=0, points=0")
 	if err != nil {
 		return err
 	}
@@ -205,7 +206,7 @@ func (r *StandingRepo) RecalculateAll(matches []models.Match) error {
 	standingMap := make(map[int]*models.Standing)
 
 	// Init from existing standings rows
-	rows, err := r.db.Query("SELECT team_id FROM standings")
+	rows, err := r.db.QueryContext(ctx, "SELECT team_id FROM standings")
 	if err != nil {
 		return err
 	}
@@ -262,7 +263,7 @@ func (r *StandingRepo) RecalculateAll(matches []models.Match) error {
 	// Update GD and persist
 	for _, s := range standingMap {
 		s.GD = s.GF - s.GA
-		if err := r.Upsert(s); err != nil {
+		if err := r.Upsert(ctx, s); err != nil {
 			return err
 		}
 	}

@@ -1,39 +1,42 @@
 package services
 
-import "github.com/insider/league-simulation/models"
+import (
+	"context"
+	"github.com/insider/league-simulation/models"
+)
 
 // LeagueService defines the core league operations interface.
 // Interface-based design as required by the task.
 type LeagueService interface {
 	// GetStandings returns the current league table (PTS, W, D, L, GD)
-	GetStandings() ([]models.Standing, error)
+	GetStandings(ctx context.Context) ([]models.Standing, error)
 
 	// PlayNextWeek simulates the next week's matches and updates state
-	PlayNextWeek() (*models.WeekResult, error)
+	PlayNextWeek(ctx context.Context) (*models.WeekResult, error)
 
 	// PlayAll simulates all remaining matches in the season
-	PlayAll() ([]models.WeekResult, error)
+	PlayAll(ctx context.Context) ([]models.WeekResult, error)
 
 	// GetMatch retrieves a match and its events
-	GetMatch(matchID int) (*models.Match, []models.MatchEvent, error)
+	GetMatch(ctx context.Context, matchID int) (*models.Match, []models.MatchEvent, error)
 
 	// EditMatch edits a specific match result; recalculates standings and morale
-	EditMatch(matchID int, homeScore int, awayScore int) (*models.Match, error)
+	EditMatch(ctx context.Context, matchID int, homeScore int, awayScore int) (*models.Match, error)
 
 	// GetPredictions runs Monte Carlo simulations for championship win %
-	GetPredictions() ([]models.Prediction, error)
+	GetPredictions(ctx context.Context) ([]models.Prediction, error)
 
 	// Rollback reverts database state to a specific week (Time Machine)
-	Rollback(week int) error
+	Rollback(ctx context.Context, week int) error
 
 	// GetTeamMetrics returns a team's current strength, morale, fatigue, market value
-	GetTeamMetrics(teamID int) (*models.TeamMetrics, error)
+	GetTeamMetrics(ctx context.Context, teamID int) (*models.TeamMetrics, error)
 
 	// Reset clears all data and regenerates
-	Reset() error
+	Reset(ctx context.Context) error
 
 	// GetCurrentWeek returns next unplayed week number
-	GetCurrentWeek() (int, error)
+	GetCurrentWeek(ctx context.Context) (int, error)
 }
 
 // MatchEngine defines the interface for simulating match results.

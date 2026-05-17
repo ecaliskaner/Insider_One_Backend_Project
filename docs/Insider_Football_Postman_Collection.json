@@ -1,0 +1,220 @@
+{
+	"info": {
+		"_postman_id": "4161dece-8c9e-4e4f-b673-db21de3e78a2",
+		"name": "Insider Football Simulation API",
+		"description": "Complete E2E collection for the Insider Football Simulation API.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Reset League",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/league/reset",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"league",
+						"reset"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "2. Get Standings",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/league/table",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"league",
+						"table"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "3. Play Next Week",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/league/next-week",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"league",
+						"next-week"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "4. Play All",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/league/play-all",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"league",
+						"play-all"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "5. Oracle Predictions",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/simulation/oracle",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"simulation",
+						"oracle"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "6. Edit Match",
+			"request": {
+				"method": "PUT",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"home_score\": 5,\n    \"away_score\": 0\n}"
+				},
+				"url": {
+					"raw": "http://localhost:8080/api/v1/matches/1",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"matches",
+						"1"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "7. Rollback (Time Machine)",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/league/rollback/2",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"league",
+						"rollback",
+						"2"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "8. Get Match Details",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/matches/1",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"matches",
+						"1"
+					]
+				}
+			},
+			"response": []
+		},
+		{
+			"name": "9. Get Team Metrics",
+			"request": {
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "http://localhost:8080/api/v1/teams/1/metrics",
+					"protocol": "http",
+					"host": [
+						"localhost"
+					],
+					"port": "8080",
+					"path": [
+						"api",
+						"v1",
+						"teams",
+						"1",
+						"metrics"
+					]
+				}
+			},
+			"response": []
+		}
+	]
+}

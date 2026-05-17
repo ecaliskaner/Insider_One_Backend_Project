@@ -1,5 +1,7 @@
 package models
 
+import "context"
+
 // Team represents a football team with advanced metrics
 type Team struct {
 	ID              int     `json:"id"`
@@ -26,9 +28,9 @@ type TeamMetrics struct {
 
 // TeamRepository defines the interface for team data access
 type TeamRepository interface {
-	GetAll() ([]Team, error)
-	GetByID(id int) (*Team, error)
-	Create(team *Team) error
-	Update(team *Team) error
-	DeleteAll() error
+	GetAll(ctx context.Context) ([]Team, error)
+	GetByID(ctx context.Context, id int) (*Team, error)
+	Create(ctx context.Context, team *Team) error
+	Update(ctx context.Context, team *Team) error
+	DeleteAll(ctx context.Context) error
 }

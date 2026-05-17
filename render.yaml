@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: insider-football-simulation
+    env: docker
+    dockerfilePath: Dockerfile
+    autoDeploy: true
+    branch: main
+    healthCheckPath: /api/v1/league/table
+    envVars:
+      - key: PORT
+        value: 8080
+      - key: DB_PATH
+        value: /data/league.db
+    disk:
+      name: sqlite-data
+      mountPath: /data
+      sizeGB: 1

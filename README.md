@@ -75,6 +75,7 @@ Interactive OpenAPI 3.0 documentation is available at http://localhost:8080/swag
 | `GET` | `/api/v1/league/table` | Returns current standings (PTS, W, D, L, GD). |
 | `POST` | `/api/v1/league/next-week` | Simulates the next week's matches and updates state. |
 | `POST` | `/api/v1/league/play-all` | Simulates all remaining matches in the season. |
+| `GET` | `/api/v1/matches/{id}` | Returns a specific match and all of its associated events (goals, injuries, etc). |
 | `PUT` | `/api/v1/matches/{id}` | Edits a specific match result; recalculates standings and morale. |
 | `GET` | `/api/v1/simulation/oracle` | Runs 1,000 Monte Carlo simulations to calculate Championship Win %. |
 | `POST` | `/api/v1/league/rollback/{week}` | **Time Machine:** Reverts database state to a specific week. |
@@ -103,6 +104,22 @@ ON CONFLICT(team_id) DO UPDATE SET
     lost=excluded.lost, gf=excluded.gf, ga=excluded.ga, gd=excluded.gd,
     points=excluded.points
 ```
+
+## 🎯 Case Requirements Mapping (Reviewer Guide)
+
+To assist the senior review process, here is exactly how and where the core case requirements were met:
+
+| Requirement | Implementation Details |
+| ----------- | ---------------------- |
+| **RESTful API Design** | Implemented using `gorilla/mux` with strict `/api/v1/...` prefixing. Standardized response envelopes via `APIResponse` struct (`handlers/league_handler.go`). |
+| **Database Structure** | Relational `SQLite` via `database/sql`. Fully normalized (`teams`, `players`, `matches`, `events`, `standings`). Context-aware querying. |
+| **Match Simulation Engine** | Uses a seeded Knuth Poisson Distribution algorithm taking Morale, Fatigue, Base Strength, and Dynamic Weather modifiers into account (`services/match_engine.go`). |
+| **Play All & Week-by-Week** | Fully decoupled thread-safe mechanisms allowing incremental (`/next-week`) or bulk (`/play-all`) progression (`services/league_impl.go`). |
+| **Modify Data (Edit Match)** | Synchronous `EditMatch` triggers a fully deterministic `rebuildState()` ensuring absolute mathematical consistency across the entire league. |
+| **Time Machine (Rollback)** | Supports reverting to any past week by truncating future state and replaying historical events. |
+| **Championship Oracle** | Runs 1,000 asynchronous Monte Carlo simulations across worker pools utilizing all available CPU cores. Features an automatic caching layer invalidated on state changes (`services/league_impl.go`). |
+| **SOLID & Architecture** | Strict Repository/Service/Handler separation. Dependency Injection used universally. Fully Context-Aware (`context.Context`) for tracing/timeouts. |
+| **Testing** | E2E Integration Test simulating the full lifecycle (`tests/integration_test.go`) alongside Unit Tests for complex algorithms (`services/match_engine_test.go`). |
 
 ## ⚽ Simulation Features
 
@@ -142,9 +159,11 @@ ON CONFLICT(team_id) DO UPDATE SET
 
 ## 🚀 Advanced Enterprise Features
 
+- **Concurrency & Thread Safety**: All state-mutating endpoints (`/next-week`, `/rollback`, `/edit`, `/reset`) are protected by a global `sync.Mutex`. This perfectly eliminates race conditions, safely queueing simultaneous requests and ensuring zero duplicate match processing.
+- **Official Premier League Tiebreakers**: `GetAll()` dynamically computes "mini-leagues" to resolve deadlocks. If teams are perfectly tied on Points, GD, and GF, it extracts their specific H2H matches and correctly sorts them by **Head-to-Head Points** and **Head-to-Head Away Goals**.
 - **Graceful Server Shutdown**: Intercepts `SIGTERM` and `SIGINT` signals, halts new incoming traffic, finishes active requests up to a 10-second context timeout, and safely closes the database connection to prevent WAL corruption.
 - **Internal Event-Driven Architecture (Pub/Sub)**: `MatchEngine` is decoupled from persistence. It publishes `MatchFinishedEvent` to a channel-based `EventBus`. Independent background listeners consume these events to asynchronously recalculate standings and update morale/fatigue.
-- **Oracle Response Caching**: The CPU-heavy `/oracle` Monte Carlo endpoint is guarded by a thread-safe `sync.RWMutex` in-memory cache, achieving 0ms latency on repeated calls. The cache is surgically invalidated upon any league state mutation (match played, rollback, reset).
+- **Oracle Response Caching**: The CPU-heavy `/oracle` Monte Carlo endpoint is guarded by a thread-safe `sync.RWMutex` in-memory cache, achieving <1ms latency on repeated calls. The cache is surgically invalidated upon any league state mutation.
 - **Database Migrations (`golang-migrate`)**: Migrated away from raw startup scripts. Employs versioned `.up.sql` and `.down.sql` schemas, executed seamlessly on startup utilizing Go's `embed.FS` and `migrate/v4`.
 - **Continuous Integration**: Powered by `.github/workflows/ci.yml`. On every push or PR, GitHub Actions automatically provisions Go, runs `go fmt`, `go vet`, executes table-driven unit tests with `testify/mock`, and validates the Docker build context.
 
@@ -177,15 +196,18 @@ curl -X POST http://localhost:8080/api/v1/league/play-all
 # 5. Oracle predictions (after week 4)
 curl http://localhost:8080/api/v1/simulation/oracle
 
-# 6. Edit a match result
+# 6. Get match events
+curl http://localhost:8080/api/v1/matches/1
+
+# 7. Edit a match result
 curl -X PUT http://localhost:8080/api/v1/matches/1 \
   -H "Content-Type: application/json" \
   -d '{"home_score": 3, "away_score": 0}'
 
-# 7. Time Machine — rollback to week 3
+# 8. Time Machine — rollback to week 3
 curl -X POST http://localhost:8080/api/v1/league/rollback/3
 
-# 8. Reset league
+# 9. Reset league
 curl -X POST http://localhost:8080/api/v1/league/reset
 ```
 

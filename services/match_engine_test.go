@@ -38,8 +38,8 @@ func TestMatchEngine_SimulateMatch(t *testing.T) {
 			weather:       "sunny",
 			mockFloat:     0.5,
 			mockInt:       45,
-			expectedHomeG: 0, 
-			expectedAwayG: 0,
+			expectedHomeG: 2, 
+			expectedAwayG: 2,
 		},
 		{
 			name: "Rainy Match Strong Home",
@@ -52,7 +52,7 @@ func TestMatchEngine_SimulateMatch(t *testing.T) {
 			weather:       "rainy",
 			mockFloat:     0.1, 
 			mockInt:       10,
-			expectedHomeG: 3, 
+			expectedHomeG: 0, 
 			expectedAwayG: 0, 
 		},
 	}

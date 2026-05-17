@@ -1,5 +1,7 @@
 package models
 
+import "context"
+
 // Player represents a football player on a team
 type Player struct {
 	ID       int    `json:"id"`
@@ -11,9 +13,9 @@ type Player struct {
 
 // PlayerRepository defines the interface for player data access
 type PlayerRepository interface {
-	GetAll() ([]Player, error)
-	GetByTeamID(teamID int) ([]Player, error)
-	GetByID(id int) (*Player, error)
-	Create(player *Player) error
-	DeleteAll() error
+	GetAll(ctx context.Context) ([]Player, error)
+	GetByTeamID(ctx context.Context, teamID int) ([]Player, error)
+	GetByID(ctx context.Context, id int) (*Player, error)
+	Create(ctx context.Context, player *Player) error
+	DeleteAll(ctx context.Context) error
 }

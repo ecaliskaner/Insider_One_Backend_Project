@@ -1,5 +1,7 @@
 package models
 
+import "context"
+
 // Match represents a single match between two teams
 type Match struct {
 	ID               int    `json:"id"`
@@ -54,29 +56,29 @@ type Prediction struct {
 
 // MatchRepository defines the interface for match data access
 type MatchRepository interface {
-	GetAll() ([]Match, error)
-	GetByWeek(week int) ([]Match, error)
-	GetByID(id int) (*Match, error)
-	Update(match *Match) error
-	Create(match *Match) error
-	GetCurrentWeek() (int, error)
-	DeleteAll() error
-	DeleteFromWeek(week int) error // For rollback
+	GetAll(ctx context.Context) ([]Match, error)
+	GetByWeek(ctx context.Context, week int) ([]Match, error)
+	GetByID(ctx context.Context, id int) (*Match, error)
+	Update(ctx context.Context, match *Match) error
+	Create(ctx context.Context, match *Match) error
+	GetCurrentWeek(ctx context.Context) (int, error)
+	DeleteAll(ctx context.Context) error
+	DeleteFromWeek(ctx context.Context, week int) error // For rollback
 }
 
 // MatchEventRepository defines the interface for match events
 type MatchEventRepository interface {
-	GetByMatchID(matchID int) ([]MatchEvent, error)
-	Create(event *MatchEvent) error
-	DeleteByMatchID(matchID int) error
-	DeleteAll() error
-	DeleteFromWeek(week int) error // For rollback
+	GetByMatchID(ctx context.Context, matchID int) ([]MatchEvent, error)
+	Create(ctx context.Context, event *MatchEvent) error
+	DeleteByMatchID(ctx context.Context, matchID int) error
+	DeleteAll(ctx context.Context) error
+	DeleteFromWeek(ctx context.Context, week int) error // For rollback
 }
 
 // StandingRepository defines the interface for standings snapshots
 type StandingRepository interface {
-	GetAll() ([]Standing, error)
-	Upsert(standing *Standing) error
-	DeleteAll() error
-	RecalculateAll(matches []Match) error
+	GetAll(ctx context.Context) ([]Standing, error)
+	Upsert(ctx context.Context, standing *Standing) error
+	DeleteAll(ctx context.Context) error
+	RecalculateAll(ctx context.Context, matches []Match) error
 }
