@@ -20,20 +20,36 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version: '1.22'
+          go-version: '1.26.3'
           cache: true
 
       - name: Install Dependencies
         run: go mod download
 
-      - name: Run go fmt
-        run: if [ "$(go fmt ./... | wc -l)" -gt 0 ]; then echo "Code formatting issues found. Please run 'go fmt ./...' locally."; exit 1; fi
+      - name: Check formatting
+        run: |
+          files="$(gofmt -l .)"
+          if [ -n "$files" ]; then
+            echo "Code formatting issues found. Please run 'gofmt -w .' locally."
+            echo "$files"
+            exit 1
+          fi
 
       - name: Run go vet
         run: go vet ./...
 
       - name: Run Unit Tests
         run: go test -v ./...
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v6
+        with:
+          version: v1.64.8
+
+      - name: Run gosec (Security Scanner)
+        uses: securego/gosec@v2.22.3
+        with:
+          args: ./...
 
   docker-build:
     name: Docker Build Validation

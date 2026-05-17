@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"fmt"
 	"log"
 
@@ -15,6 +16,14 @@ func DefaultTeams() []models.Team {
 		{Name: "Liverpool", MarketValue: 980.0, BaseStrength: 82, CurrentStrength: 82, Morale: 0.7, Fatigue: 0.0, City: "Liverpool"},
 		{Name: "Chelsea", MarketValue: 900.0, BaseStrength: 75, CurrentStrength: 75, Morale: 0.7, Fatigue: 0.0, City: "London"},
 	}
+}
+
+func ResetAutoIncrement(ctx context.Context, store DBTX) error {
+	_, err := store.ExecContext(ctx, `
+		DELETE FROM sqlite_sequence
+		WHERE name IN ('teams', 'players', 'matches', 'match_events')`,
+	)
+	return err
 }
 
 // DefaultPlayers returns realistic players for each team
@@ -65,8 +74,12 @@ func DefaultPlayers() map[string][]models.Player {
 
 // SeedTeams inserts the default teams if they don't exist
 func SeedTeams(db *DB) error {
+	return SeedTeamsContext(context.Background(), db.Conn)
+}
+
+func SeedTeamsContext(ctx context.Context, store DBTX) error {
 	var count int
-	err := db.Conn.QueryRow("SELECT COUNT(*) FROM teams").Scan(&count)
+	err := store.QueryRowContext(ctx, "SELECT COUNT(*) FROM teams").Scan(&count)
 	if err != nil {
 		return fmt.Errorf("failed to count teams: %w", err)
 	}
@@ -77,7 +90,7 @@ func SeedTeams(db *DB) error {
 
 	teams := DefaultTeams()
 	for _, team := range teams {
-		_, err := db.Conn.Exec(
+		_, err := store.ExecContext(ctx,
 			`INSERT INTO teams (name, market_value, base_strength, current_strength, morale, fatigue, city)
 			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
 			team.Name, team.MarketValue, team.BaseStrength, team.CurrentStrength,
@@ -94,8 +107,12 @@ func SeedTeams(db *DB) error {
 
 // SeedPlayers inserts the default players if they don't exist
 func SeedPlayers(db *DB) error {
+	return SeedPlayersContext(context.Background(), db.Conn)
+}
+
+func SeedPlayersContext(ctx context.Context, store DBTX) error {
 	var count int
-	err := db.Conn.QueryRow("SELECT COUNT(*) FROM players").Scan(&count)
+	err := store.QueryRowContext(ctx, "SELECT COUNT(*) FROM players").Scan(&count)
 	if err != nil {
 		return fmt.Errorf("failed to count players: %w", err)
 	}
@@ -106,16 +123,25 @@ func SeedPlayers(db *DB) error {
 
 	// Get team IDs by name
 	teamIDs := make(map[string]int)
-	rows, err := db.Conn.Query("SELECT id, name FROM teams")
+	rows, err := store.QueryContext(ctx, "SELECT id, name FROM teams")
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 	for rows.Next() {
 		var id int
 		var name string
-		rows.Scan(&id, &name)
+		if err := rows.Scan(&id, &name); err != nil {
+			rows.Close()
+			return err
+		}
 		teamIDs[name] = id
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
 	}
 
 	allPlayers := DefaultPlayers()
@@ -123,7 +149,7 @@ func SeedPlayers(db *DB) error {
 	for teamName, players := range allPlayers {
 		teamID := teamIDs[teamName]
 		for _, p := range players {
-			_, err := db.Conn.Exec(
+			_, err := store.ExecContext(ctx,
 				"INSERT INTO players (team_id, name, position) VALUES (?, ?, ?)",
 				teamID, p.Name, p.Position,
 			)
@@ -140,8 +166,12 @@ func SeedPlayers(db *DB) error {
 
 // SeedStandings initializes standings for all teams
 func SeedStandings(db *DB) error {
+	return SeedStandingsContext(context.Background(), db.Conn)
+}
+
+func SeedStandingsContext(ctx context.Context, store DBTX) error {
 	var count int
-	err := db.Conn.QueryRow("SELECT COUNT(*) FROM standings").Scan(&count)
+	err := store.QueryRowContext(ctx, "SELECT COUNT(*) FROM standings").Scan(&count)
 	if err != nil {
 		return fmt.Errorf("failed to count standings: %w", err)
 	}
@@ -150,16 +180,30 @@ func SeedStandings(db *DB) error {
 		return nil
 	}
 
-	rows, err := db.Conn.Query("SELECT id FROM teams")
+	rows, err := store.QueryContext(ctx, "SELECT id FROM teams")
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
 
+	var teamIDs []int
 	for rows.Next() {
 		var id int
-		rows.Scan(&id)
-		_, err := db.Conn.Exec(
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return err
+		}
+		teamIDs = append(teamIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return err
+	}
+	if err := rows.Close(); err != nil {
+		return err
+	}
+
+	for _, id := range teamIDs {
+		_, err := store.ExecContext(ctx,
 			"INSERT INTO standings (team_id, played, won, drawn, lost, gf, ga, gd, points) VALUES (?, 0, 0, 0, 0, 0, 0, 0, 0)", id,
 		)
 		if err != nil {
@@ -174,8 +218,12 @@ func SeedStandings(db *DB) error {
 // GenerateSchedule creates the full round-robin schedule (home & away)
 // 4 teams = 6 unique matchups × 2 = 12 matches over 6 weeks, 2 matches/week
 func GenerateSchedule(db *DB) error {
+	return GenerateScheduleContext(context.Background(), db.Conn)
+}
+
+func GenerateScheduleContext(ctx context.Context, store DBTX) error {
 	var count int
-	err := db.Conn.QueryRow("SELECT COUNT(*) FROM matches").Scan(&count)
+	err := store.QueryRowContext(ctx, "SELECT COUNT(*) FROM matches").Scan(&count)
 	if err != nil {
 		return fmt.Errorf("failed to count matches: %w", err)
 	}
@@ -184,17 +232,26 @@ func GenerateSchedule(db *DB) error {
 		return nil
 	}
 
-	rows, err := db.Conn.Query("SELECT id FROM teams ORDER BY id")
+	rows, err := store.QueryContext(ctx, "SELECT id FROM teams ORDER BY id")
 	if err != nil {
 		return fmt.Errorf("failed to get teams: %w", err)
 	}
-	defer rows.Close()
 
 	var teamIDs []int
 	for rows.Next() {
 		var id int
-		rows.Scan(&id)
+		if err := rows.Scan(&id); err != nil {
+			rows.Close()
+			return fmt.Errorf("scan team id: %w", err)
+		}
 		teamIDs = append(teamIDs, id)
+	}
+	if err := rows.Err(); err != nil {
+		rows.Close()
+		return fmt.Errorf("iterate team ids: %w", err)
+	}
+	if err := rows.Close(); err != nil {
+		return fmt.Errorf("close team rows: %w", err)
 	}
 
 	if len(teamIDs) != 4 {
@@ -212,23 +269,13 @@ func GenerateSchedule(db *DB) error {
 		{{teamIDs[0], teamIDs[3]}, {teamIDs[1], teamIDs[2]}},
 	}
 
-	tx, err := db.Conn.Begin()
-	if err != nil {
-		return err
-	}
-
-	stmt, err := tx.Prepare("INSERT INTO matches (week, home_team_id, away_team_id, weather_condition, status) VALUES (?, ?, ?, 'sunny', 'scheduled')")
-	if err != nil {
-		tx.Rollback()
-		return err
-	}
-	defer stmt.Close()
-
 	// First leg (weeks 1-3)
 	for week, matches := range firstLeg {
 		for _, m := range matches {
-			if _, err := stmt.Exec(week+1, m.home, m.away); err != nil {
-				tx.Rollback()
+			if _, err := store.ExecContext(ctx,
+				"INSERT INTO matches (week, home_team_id, away_team_id, weather_condition, status) VALUES (?, ?, ?, 'sunny', 'scheduled')",
+				week+1, m.home, m.away,
+			); err != nil {
 				return err
 			}
 		}
@@ -237,15 +284,13 @@ func GenerateSchedule(db *DB) error {
 	// Second leg (weeks 4-6) - reversed home/away
 	for week, matches := range firstLeg {
 		for _, m := range matches {
-			if _, err := stmt.Exec(week+4, m.away, m.home); err != nil {
-				tx.Rollback()
+			if _, err := store.ExecContext(ctx,
+				"INSERT INTO matches (week, home_team_id, away_team_id, weather_condition, status) VALUES (?, ?, ?, 'sunny', 'scheduled')",
+				week+4, m.away, m.home,
+			); err != nil {
 				return err
 			}
 		}
-	}
-
-	if err := tx.Commit(); err != nil {
-		return err
 	}
 
 	log.Println("✅ Generated 12 matches across 6 weeks")

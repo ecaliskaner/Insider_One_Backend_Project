@@ -32,6 +32,44 @@ const docTemplate = `{
                             "type": "object",
                             "additionalProperties": true
                         }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
+                        }
+                    }
+                }
+            }
+        },
+        "/league/overview": {
+            "get": {
+                "description": "Returns the current league table, weekly match status, and predictions when available",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "league"
+                ],
+                "summary": "Get league overview",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.LeagueOverview"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
+                        }
                     }
                 }
             }
@@ -52,6 +90,18 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
                         }
                     }
                 }
@@ -75,6 +125,12 @@ const docTemplate = `{
                             "additionalProperties": {
                                 "type": "string"
                             }
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
                         }
                     }
                 }
@@ -106,6 +162,18 @@ const docTemplate = `{
                             "type": "object",
                             "additionalProperties": true
                         }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
+                        }
                     }
                 }
             }
@@ -127,11 +195,57 @@ const docTemplate = `{
                             "type": "object",
                             "additionalProperties": true
                         }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
+                        }
                     }
                 }
             }
         },
         "/matches/{id}": {
+            "get": {
+                "description": "Returns a specific match and its events",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "matches"
+                ],
+                "summary": "Get match details",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Match ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
+                        }
+                    }
+                }
+            },
             "put": {
                 "description": "Edits a specific match result; recalculates standings and morale",
                 "consumes": [
@@ -153,15 +267,12 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Scores: {home_score: 1, away_score: 2}",
+                        "description": "Edited score",
                         "name": "body",
                         "in": "body",
                         "required": true,
                         "schema": {
-                            "type": "object",
-                            "additionalProperties": {
-                                "type": "integer"
-                            }
+                            "$ref": "#/definitions/handlers.EditMatchRequest"
                         }
                     }
                 ],
@@ -171,6 +282,18 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
                         }
                     }
                 }
@@ -192,6 +315,18 @@ const docTemplate = `{
                         "schema": {
                             "type": "object",
                             "additionalProperties": true
+                        }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
+                        }
+                    },
+                    "500": {
+                        "description": "Internal Server Error",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
                         }
                     }
                 }
@@ -222,12 +357,182 @@ const docTemplate = `{
                         "schema": {
                             "$ref": "#/definitions/models.TeamMetrics"
                         }
+                    },
+                    "400": {
+                        "description": "Bad Request",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
+                        }
+                    },
+                    "404": {
+                        "description": "Not Found",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ProblemDetails"
+                        }
                     }
                 }
             }
         }
     },
     "definitions": {
+        "handlers.EditMatchRequest": {
+            "type": "object",
+            "properties": {
+                "away_score": {
+                    "type": "integer",
+                    "example": 1
+                },
+                "home_score": {
+                    "type": "integer",
+                    "example": 3
+                }
+            }
+        },
+        "handlers.ProblemDetails": {
+            "type": "object",
+            "properties": {
+                "detail": {
+                    "description": "Human-readable explanation specific to this occurrence",
+                    "type": "string"
+                },
+                "instance": {
+                    "description": "URI reference that identifies the specific occurrence",
+                    "type": "string"
+                },
+                "status": {
+                    "description": "HTTP status code",
+                    "type": "integer"
+                },
+                "title": {
+                    "description": "Short, human-readable summary",
+                    "type": "string"
+                },
+                "type": {
+                    "description": "URI reference that identifies the problem type",
+                    "type": "string"
+                }
+            }
+        },
+        "models.LeagueOverview": {
+            "type": "object",
+            "properties": {
+                "current_week": {
+                    "type": "integer"
+                },
+                "predictions": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Prediction"
+                    }
+                },
+                "standings": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Standing"
+                    }
+                },
+                "weeks": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.WeekResult"
+                    }
+                }
+            }
+        },
+        "models.Match": {
+            "type": "object",
+            "properties": {
+                "away_score": {
+                    "description": "nil if not played",
+                    "type": "integer"
+                },
+                "away_team": {
+                    "type": "string"
+                },
+                "away_team_id": {
+                    "type": "integer"
+                },
+                "home_score": {
+                    "description": "nil if not played",
+                    "type": "integer"
+                },
+                "home_team": {
+                    "type": "string"
+                },
+                "home_team_id": {
+                    "type": "integer"
+                },
+                "id": {
+                    "type": "integer"
+                },
+                "status": {
+                    "description": "scheduled, played, edited",
+                    "type": "string"
+                },
+                "weather_condition": {
+                    "description": "sunny, rainy, snowy, windy, foggy",
+                    "type": "string"
+                },
+                "week": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.Prediction": {
+            "type": "object",
+            "properties": {
+                "championship_win_pct": {
+                    "type": "number"
+                },
+                "team_id": {
+                    "type": "integer"
+                },
+                "team_name": {
+                    "type": "string"
+                }
+            }
+        },
+        "models.Standing": {
+            "type": "object",
+            "properties": {
+                "drawn": {
+                    "type": "integer"
+                },
+                "ga": {
+                    "description": "goals against",
+                    "type": "integer"
+                },
+                "gd": {
+                    "description": "goal difference",
+                    "type": "integer"
+                },
+                "gf": {
+                    "description": "goals for",
+                    "type": "integer"
+                },
+                "lost": {
+                    "type": "integer"
+                },
+                "played": {
+                    "type": "integer"
+                },
+                "points": {
+                    "type": "integer"
+                },
+                "position": {
+                    "type": "integer"
+                },
+                "team_id": {
+                    "type": "integer"
+                },
+                "team_name": {
+                    "type": "string"
+                },
+                "won": {
+                    "type": "integer"
+                }
+            }
+        },
         "models.TeamMetrics": {
             "type": "object",
             "properties": {
@@ -256,6 +561,20 @@ const docTemplate = `{
                     "type": "string"
                 }
             }
+        },
+        "models.WeekResult": {
+            "type": "object",
+            "properties": {
+                "matches": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Match"
+                    }
+                },
+                "week": {
+                    "type": "integer"
+                }
+            }
         }
     }
 }`
@@ -267,7 +586,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
 	Title:            "Football League Simulation API",
-	Description:      "This is a sophisticated league simulation API with Monte Carlo predictions and Time Machine rollback.",
+	Description:      "REST API for simulating a four-team football league, editing match results, rolling back state, and calculating championship probabilities.",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

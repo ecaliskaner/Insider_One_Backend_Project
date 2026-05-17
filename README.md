@@ -1,224 +1,190 @@
-# ⚽ Football League Simulation API v1
+# Football League Simulation API
 
-A GoLang REST API that simulates a 4-team football league with Premier League scoring rules, strength/morale/fatigue-based match simulation, weather effects, match events (including Quantum VAR Decisions), Monte Carlo championship predictions, and a Time Machine rollback feature.
+A Go REST API that simulates a four-team football league. It supports week-by-week simulation, editing played match results, rolling the league back to a target week, viewing standings and team metrics, and calculating championship probabilities with Monte Carlo simulations.
 
-## 🏗️ Architecture
+## Tech Stack
 
-Built using **strict interface-based design** and **struct composition**. External systems (Weather, Match Simulation) are implemented as **Adapters** so they can be swapped for real external APIs. Currently, they use internal generation to avoid rate limits, keeping the core simulation logic pure and testable.
-
-```
-insider/
-├── .github/workflows/         # CI/CD GitHub Actions pipelines
-├── main.go                    # Entry point, Graceful Shutdown, DI wiring
-├── models/
-│   ├── team.go                # Team struct & TeamRepository interface
-│   ├── player.go              # Player struct & PlayerRepository interface
-│   └── match.go               # Match, MatchEvent, Standing & repository interfaces
-├── database/
-│   ├── migrations/            # golang-migrate up/down SQL scripts
-│   ├── db.go                  # DB connection & auto-migration via embed.FS
-│   ├── seed.go                # Teams, players, standings, schedule seeding
-│   ├── team_repo.go           # TeamRepository impl
-│   ├── player_repo.go         # PlayerRepository impl
-│   ├── match_repo.go          # MatchRepository impl (with rollback)
-│   ├── event_repo.go          # MatchEventRepository impl
-│   └── standing_repo.go       # StandingRepository impl (with recalculation)
-├── services/
-│   ├── event_bus.go           # Internal Pub/Sub channel-based bus
-│   ├── listeners.go           # Asynchronous event consumers
-│   ├── league.go              # LeagueService, MatchEngine, WeatherAdapter interfaces
-│   ├── league_impl.go         # Core league logic (play, edit, rollback, predict)
-│   ├── match_engine.go        # Poisson-based match simulator (Adapter)
-│   └── weather.go             # Weather condition generator (Adapter)
-├── handlers/
-│   └── league_handler.go      # REST API handlers
-├── router/
-│   └── router.go              # /api/v1 route definitions
-└── README.md
-```
-
-## ⚙️ Tech Stack
-
-| Component | Technology |
-|-----------|-----------|
-| Language | Go 1.26+ |
-| HTTP Router | gorilla/mux |
-| Database | SQLite (go-sqlite3) |
-| Architecture | Interface-based, Adapter pattern, Pub/Sub, DI |
-| CI/CD | GitHub Actions |
+| Area | Choice |
+| --- | --- |
+| Language | Go 1.26.3 |
+| Router | gorilla/mux |
+| Database | SQLite via database/sql and go-sqlite3 |
 | Migrations | golang-migrate |
+| CLI | cobra + viper |
+| Tests | Go test + testify |
+| Docs | Swagger/OpenAPI generated files under docs/ |
 
-Includes API middleware for structured JSON logging (slog), panic recovery, and rate limiting (golang.org/x/time/rate).
+## Project Layout
 
-## 🐳 Docker Deployment (Recommended)
-This project is fully containerized. Use the provided Docker Compose file to spin up the application and database volume.
-```bash
-make docker-run  # Wraps docker-compose up --build -d
+```text
+.
+|-- cmd/                    # CLI commands: serve, migrate, seed
+|-- database/               # SQLite connection, migrations, seed data, repositories
+|-- docs/                   # Swagger/OpenAPI artifacts and Postman collection
+|-- handlers/               # HTTP handlers and problem+json errors
+|-- middleware/             # logging, panic recovery, rate limiting
+|-- models/                 # domain models and repository interfaces
+|-- router/                 # route definitions
+|-- services/               # league orchestration, simulation, weather, event bus
+|-- tests/                  # HTTP integration tests
+|-- Dockerfile
+|-- docker-compose.yml
+|-- Makefile
+|-- go.mod
+`-- main.go
 ```
-Interactive OpenAPI 3.0 documentation is available at http://localhost:8080/swagger/index.html when running locally.
 
-## 🧪 Testing & QA
-- **Table-Driven Tests:** Core simulation logic is validated using Go's idiomatic table-driven test patterns.
-- **Mocking:** `WeatherAdapter` and `MatchRepository` are mocked using `testify/mock` to isolate the `MatchEngine` during unit testing.
-- Run tests via: `make test` or `go test ./... -v`
+## Running Locally
 
-### Environment Variables
+```bash
+go run . migrate up
+go run . seed
+go run . serve
+```
+
+The API listens on `http://localhost:8080` by default.
+
+Swagger UI is available at:
+
+```text
+http://localhost:8080/swagger/index.html
+```
+
+For deterministic demo data, run with a seed:
+
+```bash
+SIM_SEED=42 go run . serve
+```
+
+## Running With Docker
+
+```bash
+docker compose up --build
+```
+
+or:
+
+```bash
+make docker-run
+```
+
+The container runs migrations, seeds the database, then starts the server.
+
+Docker Compose sets `SIM_SEED=42` so local demos are repeatable.
+
+## Deployment
+
+The repository includes a Render blueprint in `render.yaml`. After connecting the repository to Render, create the service from the blueprint and use the deployed service URL as your live API base URL.
+
+```text
+Live API: https://<your-render-service>.onrender.com
+Swagger: https://<your-render-service>.onrender.com/swagger/index.html
+```
+
+The Postman collection uses a `base_url` variable, so it can target either `http://localhost:8080` or the deployed URL.
+
+## Environment Variables
+
 | Variable | Default | Description |
-|----------|---------|-------------|
-| `PORT` | `8080` | Server port |
-| `DB_PATH` | `./league.db` | SQLite path |
+| --- | --- | --- |
+| `PORT` | `8080` | HTTP server port |
+| `DB_PATH` | `./league.db` | SQLite database file path |
+| `SIM_SEED` | empty | Optional integer seed for repeatable weather and match simulation |
 
-## 📡 API Endpoints
+## Make Targets
+
+```bash
+make build       # Build the binary
+make run         # Build, migrate, seed, and serve
+make test        # Run the full test suite
+make swagger     # Regenerate Swagger artifacts
+make docker-run  # Start with Docker Compose
+make clean       # Remove local build/database files
+```
+
+## API Endpoints
 
 | Method | Endpoint | Description |
-| :--- | :--- | :--- |
-| `GET` | `/api/v1/league/table` | Returns current standings (PTS, W, D, L, GD). |
-| `POST` | `/api/v1/league/next-week` | Simulates the next week's matches and updates state. |
-| `POST` | `/api/v1/league/play-all` | Simulates all remaining matches in the season. |
-| `GET` | `/api/v1/matches/{id}` | Returns a specific match and all of its associated events (goals, injuries, etc). |
-| `PUT` | `/api/v1/matches/{id}` | Edits a specific match result; recalculates standings and morale. |
-| `GET` | `/api/v1/simulation/oracle` | Runs 1,000 Monte Carlo simulations to calculate Championship Win %. |
-| `POST` | `/api/v1/league/rollback/{week}` | **Time Machine:** Reverts database state to a specific week. |
-| `GET` | `/api/v1/teams/{id}/metrics` | Returns a team's current Strength, Morale, Fatigue, and Market Value. |
-| `POST` | `/api/v1/league/reset` | Resets the entire league to initial state. |
+| --- | --- | --- |
+| `GET` | `/api/v1/league/table` | Current standings |
+| `GET` | `/api/v1/league/overview` | Current standings, weekly match status, and predictions when available |
+| `POST` | `/api/v1/league/next-week` | Simulate the next scheduled week |
+| `POST` | `/api/v1/league/play-all` | Simulate all remaining weeks |
+| `GET` | `/api/v1/matches/{id}` | Get a match and its events |
+| `PUT` | `/api/v1/matches/{id}` | Edit a match score and rebuild league state |
+| `GET` | `/api/v1/simulation/oracle` | Run championship probability simulations |
+| `POST` | `/api/v1/league/rollback/{week}` | Reset matches from the target week onward |
+| `GET` | `/api/v1/teams/{id}/metrics` | Get strength, morale, fatigue, and market value |
+| `POST` | `/api/v1/league/reset` | Recreate teams, players, standings, and schedule |
 
-## 🗄 SQL Schema & Queries
+## Domain Rules
 
-5 tables matching the schema requirements:
+- Four teams play a six-week double round-robin schedule.
+- A win is worth 3 points, a draw 1 point, and a loss 0 points.
+- Standings are ordered by points, goal difference, goals for, then tied-team head-to-head rules where available.
+- Match simulation uses team strength, morale, fatigue, weather, and home advantage.
+- Editing a match result triggers a full state rebuild.
+- Rollback resets matches and events from the target week onward, then rebuilds standings and team metrics.
+- Oracle predictions are available after enough weeks have been played and are cached until league state changes.
 
-```sql
--- teams: id, name, market_value, base_strength, current_strength, morale, fatigue, city
--- players: id, team_id, name, position
--- matches: id, week, home_team_id, away_team_id, home_score, away_score, weather_condition, status
--- match_events: id, match_id, player_id, event_type, minute, detail
--- standings: team_id, played, won, drawn, lost, gf, ga, gd, points
+## Data Model
+
+The schema has five main tables:
+
+```text
+teams         id, name, market_value, base_strength, current_strength, morale, fatigue, city
+players       id, team_id, name, position
+matches       id, week, home_team_id, away_team_id, home_score, away_score, weather_condition, status
+match_events  id, match_id, player_id, event_type, minute, detail
+standings     team_id, played, won, drawn, lost, gf, ga, gd, points
 ```
 
-Complex SQL queries are located in `database/standing_repo.go` and `database/match_repo.go`. Here is an example of the Standings Upsert query which recalculates the dynamic league table:
+Migrations live in `database/migrations`.
 
-```sql
-INSERT INTO standings (team_id, played, won, drawn, lost, gf, ga, gd, points)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-ON CONFLICT(team_id) DO UPDATE SET
-    played=excluded.played, won=excluded.won, drawn=excluded.drawn,
-    lost=excluded.lost, gf=excluded.gf, ga=excluded.ga, gd=excluded.gd,
-    points=excluded.points
-```
+Detailed schema notes and key repository queries are documented in `docs/sql.md`.
 
-## 🎯 Case Requirements Mapping (Reviewer Guide)
+## Consistency And Error Handling
 
-To assist the senior review process, here is exactly how and where the core case requirements were met:
+The service serializes league state mutations with an application-level lock. Multi-table write operations such as playing a week, editing a result, rollback, and reset are wrapped in SQL transactions so partial state is not committed if a step fails.
 
-| Requirement | Implementation Details |
-| ----------- | ---------------------- |
-| **RESTful API Design** | Implemented using `gorilla/mux` with strict `/api/v1/...` prefixing. Standardized response envelopes via `APIResponse` struct (`handlers/league_handler.go`). |
-| **Database Structure** | Relational `SQLite` via `database/sql`. Fully normalized (`teams`, `players`, `matches`, `events`, `standings`). Context-aware querying. |
-| **Match Simulation Engine** | Uses a seeded Knuth Poisson Distribution algorithm taking Morale, Fatigue, Base Strength, and Dynamic Weather modifiers into account (`services/match_engine.go`). |
-| **Play All & Week-by-Week** | Fully decoupled thread-safe mechanisms allowing incremental (`/next-week`) or bulk (`/play-all`) progression (`services/league_impl.go`). |
-| **Modify Data (Edit Match)** | Synchronous `EditMatch` triggers a fully deterministic `rebuildState()` ensuring absolute mathematical consistency across the entire league. |
-| **Time Machine (Rollback)** | Supports reverting to any past week by truncating future state and replaying historical events. |
-| **Championship Oracle** | Runs 1,000 asynchronous Monte Carlo simulations across worker pools utilizing all available CPU cores. Features an automatic caching layer invalidated on state changes (`services/league_impl.go`). |
-| **SOLID & Architecture** | Strict Repository/Service/Handler separation. Dependency Injection used universally. Fully Context-Aware (`context.Context`) for tracing/timeouts. |
-| **Testing** | E2E Integration Test simulating the full lifecycle (`tests/integration_test.go`) alongside Unit Tests for complex algorithms (`services/match_engine_test.go`). |
+Repository methods use `context.Context`, and database scan/write errors are returned to callers instead of being silently ignored.
 
-## ⚽ Simulation Features
+## Testing
 
-### Strength-Based Match Engine
-- Poisson distribution for realistic goals
-- Team strength (1-100) affects expected goals
-- **Morale** boost/penalty (wins raise morale, losses lower it)
-- **Fatigue** accumulates each match, reducing performance
-- **Home advantage** (25% boost)
-
-### Weather System
-- Weather generated per match based on home city (Implemented as an Adapter, easily swappable for OpenWeatherMap API)
-- Conditions: ☀️ Sunny, 🌧️ Rainy, ❄️ Snowy, 💨 Windy, 🌫️ Foggy
-- Manchester/Liverpool: more rain; London: more variety
-- Weather affects goal expectations
-
-### Match Events
-- ⚽ Goals with random minute
-- 🔴 Quantum VAR Decisions (5% chance per match, mock internal generator instead of external Quantum API to avoid rate limits)
-- 🩹 Injuries (10% chance per match)
-
-### Dynamic Team Metrics
-- **Current Strength** = Base × Morale Factor × Fatigue Factor
-- **Market Value** increases 2% per win
-- Morale/fatigue reset on rollback
-
-### 🔮 Oracle (Monte Carlo Predictions)
-- Available after week 4
-- Runs **1,000 simulations concurrently** utilizing Go worker pools and channels for millisecond-level parallel execution without race conditions.
-- Returns championship probability per team
-
-### ⏪ Time Machine (Rollback)
-- Revert to any week (1-6)
-- Resets matches from that week onward to "scheduled"
-- Deletes associated events
-- Recalculates standings and team metrics
-
-## 🚀 Advanced Enterprise Features
-
-- **Concurrency & Thread Safety**: All state-mutating endpoints (`/next-week`, `/rollback`, `/edit`, `/reset`) are protected by a global `sync.Mutex`. This perfectly eliminates race conditions, safely queueing simultaneous requests and ensuring zero duplicate match processing.
-- **Official Premier League Tiebreakers**: `GetAll()` dynamically computes "mini-leagues" to resolve deadlocks. If teams are perfectly tied on Points, GD, and GF, it extracts their specific H2H matches and correctly sorts them by **Head-to-Head Points** and **Head-to-Head Away Goals**.
-- **Graceful Server Shutdown**: Intercepts `SIGTERM` and `SIGINT` signals, halts new incoming traffic, finishes active requests up to a 10-second context timeout, and safely closes the database connection to prevent WAL corruption.
-- **Internal Event-Driven Architecture (Pub/Sub)**: `MatchEngine` is decoupled from persistence. It publishes `MatchFinishedEvent` to a channel-based `EventBus`. Independent background listeners consume these events to asynchronously recalculate standings and update morale/fatigue.
-- **Oracle Response Caching**: The CPU-heavy `/oracle` Monte Carlo endpoint is guarded by a thread-safe `sync.RWMutex` in-memory cache, achieving <1ms latency on repeated calls. The cache is surgically invalidated upon any league state mutation.
-- **Database Migrations (`golang-migrate`)**: Migrated away from raw startup scripts. Employs versioned `.up.sql` and `.down.sql` schemas, executed seamlessly on startup utilizing Go's `embed.FS` and `migrate/v4`.
-- **Continuous Integration**: Powered by `.github/workflows/ci.yml`. On every push or PR, GitHub Actions automatically provisions Go, runs `go fmt`, `go vet`, executes table-driven unit tests with `testify/mock`, and validates the Docker build context.
-
-## 🏟️ Default Teams
-
-| Team | Strength | City | Market Value (M€) |
-|------|----------|------|--------------------|
-| Manchester City | 90 | Manchester | 1200 |
-| Arsenal | 85 | London | 1050 |
-| Liverpool | 82 | Liverpool | 980 |
-| Chelsea | 75 | London | 900 |
-
-Each team has 8 real players (GK, DEF, MID, FWD) seeded into the database.
-
-## 🧪 Testing with cURL / Postman
+Run:
 
 ```bash
-# 1. View standings
+go test ./...
+go vet ./...
+go build ./...
+```
+
+The test suite includes:
+
+- unit tests for the match engine and league service behavior;
+- HTTP integration tests for the main league lifecycle;
+- a regression test proving week 6 can be simulated and week 7 is rejected.
+
+## Example Requests
+
+```bash
 curl http://localhost:8080/api/v1/league/table
 
-# 2. Play next week
+curl http://localhost:8080/api/v1/league/overview
+
 curl -X POST http://localhost:8080/api/v1/league/next-week
 
-# 3. View team metrics
-curl http://localhost:8080/api/v1/teams/1/metrics
-
-# 4. Play all remaining
 curl -X POST http://localhost:8080/api/v1/league/play-all
 
-# 5. Oracle predictions (after week 4)
 curl http://localhost:8080/api/v1/simulation/oracle
 
-# 6. Get match events
-curl http://localhost:8080/api/v1/matches/1
-
-# 7. Edit a match result
 curl -X PUT http://localhost:8080/api/v1/matches/1 \
   -H "Content-Type: application/json" \
   -d '{"home_score": 3, "away_score": 0}'
 
-# 8. Time Machine — rollback to week 3
 curl -X POST http://localhost:8080/api/v1/league/rollback/3
-
-# 9. Reset league
-curl -X POST http://localhost:8080/api/v1/league/reset
 ```
 
-## 📐 Design Decisions
+## Notes For Reviewers
 
-1. **Interface-based design**: All repositories (`TeamRepository`, `MatchRepository`, `StandingRepository`, etc.) and services (`LeagueService`, `MatchEngine`, `WeatherAdapter`) are interfaces. This enables testability and swappability.
-
-2. **Adapter Pattern**: `MatchEngine` and `WeatherAdapter` are implemented as adapters. The weather adapter can be swapped for a real API; the match engine can be replaced with different simulation strategies.
-
-3. **Struct Composition**: `LeagueServiceImpl` composes multiple repository interfaces and adapter interfaces, following Go's idiomatic composition-over-inheritance approach.
-
-4. **Transactional Rollback**: The rollback feature uses database transactions to safely revert state to a previous week, including recalculating standings and team metrics from the remaining played matches.
-
-5. **SQLite with WAL**: Using Write-Ahead Logging for better concurrent read performance during Monte Carlo simulations.
+This is a compact internship-case backend, not a production service. The code now favors clear service/repository boundaries, explicit error handling, transactional writes, and runnable local/Docker workflows. Reasonable next improvements would be broader negative-path tests, stricter request validation, request-scoped rate limiting, and reducing generated Swagger artifacts in normal review diffs.

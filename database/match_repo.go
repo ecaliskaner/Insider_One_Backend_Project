@@ -10,10 +10,10 @@ import (
 
 // MatchRepo implements models.MatchRepository
 type MatchRepo struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewMatchRepo(db *sql.DB) *MatchRepo {
+func NewMatchRepo(db DBTX) *MatchRepo {
 	return &MatchRepo{db: db}
 }
 
@@ -73,7 +73,10 @@ func (r *MatchRepo) Create(ctx context.Context, match *models.Match) error {
 	if err != nil {
 		return err
 	}
-	id, _ := result.LastInsertId()
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
 	match.ID = int(id)
 	return nil
 }
@@ -86,7 +89,9 @@ func (r *MatchRepo) GetCurrentWeek(ctx context.Context) (int, error) {
 	}
 	if !week.Valid {
 		var maxWeek int
-		r.db.QueryRowContext(ctx, "SELECT COALESCE(MAX(week), 0) FROM matches").Scan(&maxWeek)
+		if err := r.db.QueryRowContext(ctx, "SELECT COALESCE(MAX(week), 0) FROM matches").Scan(&maxWeek); err != nil {
+			return 0, err
+		}
 		return maxWeek + 1, nil
 	}
 	return int(week.Int64), nil
@@ -124,6 +129,9 @@ func (r *MatchRepo) queryMatches(ctx context.Context, query string, args ...inte
 			return nil, err
 		}
 		matches = append(matches, m)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return matches, nil
 }

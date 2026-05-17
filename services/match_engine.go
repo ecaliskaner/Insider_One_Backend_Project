@@ -3,6 +3,7 @@ package services
 import (
 	"math"
 	"math/rand"
+	"sync"
 
 	"github.com/insider/league-simulation/models"
 )
@@ -18,6 +19,27 @@ type defaultRNG struct{}
 
 func (d *defaultRNG) Float64() float64 { return rand.Float64() }
 func (d *defaultRNG) Intn(n int) int   { return rand.Intn(n) }
+
+type lockedRNG struct {
+	mu  sync.Mutex
+	rng *rand.Rand
+}
+
+func NewSeededRNG(seed int64) RNG {
+	return &lockedRNG{rng: rand.New(rand.NewSource(seed))}
+}
+
+func (r *lockedRNG) Float64() float64 {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.rng.Float64()
+}
+
+func (r *lockedRNG) Intn(n int) int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.rng.Intn(n)
+}
 
 // DefaultMatchEngine implements MatchEngine with strength/morale/fatigue/weather-based simulation.
 // Acts as an Adapter — the core simulation logic is pure and testable.
@@ -35,6 +57,10 @@ func NewMatchEngineWithRNG(rng RNG) *DefaultMatchEngine {
 	return &DefaultMatchEngine{
 		rng: rng,
 	}
+}
+
+func NewMatchEngineWithSeed(seed int64) *DefaultMatchEngine {
+	return NewMatchEngineWithRNG(NewSeededRNG(seed))
 }
 
 // SimulateMatch generates realistic match results and events.

@@ -2,17 +2,16 @@ package database
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/insider/league-simulation/models"
 )
 
 // EventRepo implements models.MatchEventRepository
 type EventRepo struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewEventRepo(db *sql.DB) *EventRepo {
+func NewEventRepo(db DBTX) *EventRepo {
 	return &EventRepo{db: db}
 }
 
@@ -29,8 +28,13 @@ func (r *EventRepo) GetByMatchID(ctx context.Context, matchID int) ([]models.Mat
 	var events []models.MatchEvent
 	for rows.Next() {
 		var e models.MatchEvent
-		rows.Scan(&e.ID, &e.MatchID, &e.PlayerID, &e.EventType, &e.Minute, &e.Detail)
+		if err := rows.Scan(&e.ID, &e.MatchID, &e.PlayerID, &e.EventType, &e.Minute, &e.Detail); err != nil {
+			return nil, err
+		}
 		events = append(events, e)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return events, nil
 }
@@ -43,7 +47,10 @@ func (r *EventRepo) Create(ctx context.Context, event *models.MatchEvent) error 
 	if err != nil {
 		return err
 	}
-	id, _ := result.LastInsertId()
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
 	event.ID = int(id)
 	return nil
 }

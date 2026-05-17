@@ -8,10 +8,10 @@ type Match struct {
 	Week             int    `json:"week"`
 	HomeTeamID       int    `json:"home_team_id"`
 	AwayTeamID       int    `json:"away_team_id"`
-	HomeScore        *int   `json:"home_score"`         // nil if not played
-	AwayScore        *int   `json:"away_score"`         // nil if not played
-	WeatherCondition string `json:"weather_condition"`  // sunny, rainy, snowy, windy, foggy
-	Status           string `json:"status"`             // scheduled, played, edited
+	HomeScore        *int   `json:"home_score"`        // nil if not played
+	AwayScore        *int   `json:"away_score"`        // nil if not played
+	WeatherCondition string `json:"weather_condition"` // sunny, rainy, snowy, windy, foggy
+	Status           string `json:"status"`            // scheduled, played, edited
 	HomeTeam         string `json:"home_team,omitempty"`
 	AwayTeam         string `json:"away_team,omitempty"`
 }
@@ -28,23 +28,31 @@ type MatchEvent struct {
 
 // Standing represents a team's position in the league table
 type Standing struct {
-	TeamID         int    `json:"team_id"`
-	TeamName       string `json:"team_name,omitempty"`
-	Played         int    `json:"played"`
-	Won            int    `json:"won"`
-	Drawn          int    `json:"drawn"`
-	Lost           int    `json:"lost"`
-	GF             int    `json:"gf"`  // goals for
-	GA             int    `json:"ga"`  // goals against
-	GD             int    `json:"gd"`  // goal difference
-	Points         int    `json:"points"`
-	Position       int    `json:"position,omitempty"`
+	TeamID   int    `json:"team_id"`
+	TeamName string `json:"team_name,omitempty"`
+	Played   int    `json:"played"`
+	Won      int    `json:"won"`
+	Drawn    int    `json:"drawn"`
+	Lost     int    `json:"lost"`
+	GF       int    `json:"gf"` // goals for
+	GA       int    `json:"ga"` // goals against
+	GD       int    `json:"gd"` // goal difference
+	Points   int    `json:"points"`
+	Position int    `json:"position,omitempty"`
 }
 
 // WeekResult contains all match results for a single week
 type WeekResult struct {
 	Week    int     `json:"week"`
 	Matches []Match `json:"matches"`
+}
+
+// LeagueOverview represents the case-friendly dashboard payload.
+type LeagueOverview struct {
+	CurrentWeek int          `json:"current_week"`
+	Standings   []Standing   `json:"standings"`
+	Weeks       []WeekResult `json:"weeks"`
+	Predictions []Prediction `json:"predictions,omitempty"`
 }
 
 // Prediction represents Monte Carlo championship probability

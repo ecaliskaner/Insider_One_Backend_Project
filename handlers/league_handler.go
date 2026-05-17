@@ -3,6 +3,8 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
+	"io"
+	"log/slog"
 	"net/http"
 	"strconv"
 
@@ -23,27 +25,24 @@ func NewLeagueHandler(service services.LeagueService) *LeagueHandler {
 type APIResponse struct {
 	Success bool        `json:"success"`
 	Data    interface{} `json:"data,omitempty"`
-	Error   string      `json:"error,omitempty"`
 	Meta    interface{} `json:"meta,omitempty"`
+}
+
+type EditMatchRequest struct {
+	HomeScore *int `json:"home_score" example:"3"`
+	AwayScore *int `json:"away_score" example:"1"`
 }
 
 func respondJSON(w http.ResponseWriter, status int, data interface{}, meta interface{}) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(APIResponse{
+	if err := json.NewEncoder(w).Encode(APIResponse{
 		Success: true,
 		Data:    data,
 		Meta:    meta,
-	})
-}
-
-func respondError(w http.ResponseWriter, status int, message string) {
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(APIResponse{
-		Success: false,
-		Error:   message,
-	})
+	}); err != nil {
+		slog.Error("failed to write JSON response", slog.Any("error", err))
+	}
 }
 
 // GetTable godoc
@@ -52,17 +51,39 @@ func respondError(w http.ResponseWriter, status int, message string) {
 // @Tags         league
 // @Produce      json
 // @Success      200  {object}  map[string]interface{}
+// @Failure      500  {object}  ProblemDetails
 // @Router       /league/table [get]
 func (h *LeagueHandler) GetTable(w http.ResponseWriter, r *http.Request) {
 	standings, err := h.service.GetStandings(r.Context())
 	if err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
+		WriteProblem(w, r, http.StatusInternalServerError, "Internal Server Error", err.Error(), "https://api.insiderfootball.com/errors/internal")
 		return
 	}
-	currentWeek, _ := h.service.GetCurrentWeek(r.Context())
+	currentWeek, err := h.service.GetCurrentWeek(r.Context())
+	if err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "Internal Server Error", err.Error(), "https://api.insiderfootball.com/errors/internal")
+		return
+	}
 	respondJSON(w, http.StatusOK, standings, map[string]interface{}{
 		"current_week": currentWeek,
 	})
+}
+
+// GetOverview godoc
+// @Summary      Get league overview
+// @Description  Returns the current league table, weekly match status, and predictions when available
+// @Tags         league
+// @Produce      json
+// @Success      200  {object}  models.LeagueOverview
+// @Failure      500  {object}  ProblemDetails
+// @Router       /league/overview [get]
+func (h *LeagueHandler) GetOverview(w http.ResponseWriter, r *http.Request) {
+	overview, err := h.service.GetOverview(r.Context())
+	if err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "Internal Server Error", err.Error(), "https://api.insiderfootball.com/errors/internal")
+		return
+	}
+	respondJSON(w, http.StatusOK, overview, nil)
 }
 
 // PlayNextWeek godoc
@@ -71,15 +92,41 @@ func (h *LeagueHandler) GetTable(w http.ResponseWriter, r *http.Request) {
 // @Tags         league
 // @Produce      json
 // @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  ProblemDetails
+// @Failure      500  {object}  ProblemDetails
 // @Router       /league/next-week [post]
 func (h *LeagueHandler) PlayNextWeek(w http.ResponseWriter, r *http.Request) {
-	result, err := h.service.PlayNextWeek(r.Context())
+	ctx := r.Context()
+	currentWeek, err := h.service.GetCurrentWeek(ctx)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, err.Error())
+		WriteProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to resolve current schedule milestone.", "https://api.insiderfootball.com/errors/internal")
 		return
 	}
-	standings, _ := h.service.GetStandings(r.Context())
-	currentWeek, _ := h.service.GetCurrentWeek(r.Context())
+
+	if currentWeek > 6 {
+		WriteProblem(w, r, http.StatusBadRequest,
+			"Season Overrun Prevented",
+			"Cannot simulate next week. The 6-week league campaign has already concluded.",
+			"https://api.insiderfootball.com/errors/season-complete",
+		)
+		return
+	}
+
+	result, err := h.service.PlayNextWeek(ctx)
+	if err != nil {
+		WriteProblem(w, r, http.StatusBadRequest, "Simulation Error", err.Error(), "https://api.insiderfootball.com/errors/simulation-failed")
+		return
+	}
+	standings, err := h.service.GetStandings(r.Context())
+	if err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "Internal Server Error", err.Error(), "https://api.insiderfootball.com/errors/internal")
+		return
+	}
+	currentWeek, err = h.service.GetCurrentWeek(r.Context())
+	if err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "Internal Server Error", err.Error(), "https://api.insiderfootball.com/errors/internal")
+		return
+	}
 	respondJSON(w, http.StatusOK, result, map[string]interface{}{
 		"message":      "Week simulated successfully",
 		"standings":    standings,
@@ -93,14 +140,20 @@ func (h *LeagueHandler) PlayNextWeek(w http.ResponseWriter, r *http.Request) {
 // @Tags         league
 // @Produce      json
 // @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  ProblemDetails
+// @Failure      500  {object}  ProblemDetails
 // @Router       /league/play-all [post]
 func (h *LeagueHandler) PlayAll(w http.ResponseWriter, r *http.Request) {
 	results, err := h.service.PlayAll(r.Context())
 	if err != nil {
-		respondError(w, http.StatusBadRequest, err.Error())
+		WriteProblem(w, r, http.StatusBadRequest, "Simulation Error", err.Error(), "https://api.insiderfootball.com/errors/simulation-failed")
 		return
 	}
-	standings, _ := h.service.GetStandings(r.Context())
+	standings, err := h.service.GetStandings(r.Context())
+	if err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "Internal Server Error", err.Error(), "https://api.insiderfootball.com/errors/internal")
+		return
+	}
 	respondJSON(w, http.StatusOK, results, map[string]interface{}{
 		"message":   "All remaining weeks simulated",
 		"standings": standings,
@@ -114,18 +167,20 @@ func (h *LeagueHandler) PlayAll(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Param        id   path      int  true  "Match ID"
 // @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  ProblemDetails
+// @Failure      404  {object}  ProblemDetails
 // @Router       /matches/{id} [get]
 func (h *LeagueHandler) GetMatch(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	matchID, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid match ID")
+		WriteProblem(w, r, http.StatusBadRequest, "Invalid Match ID", "Match ID must be an integer.", "https://api.insiderfootball.com/errors/invalid-id")
 		return
 	}
 
 	match, events, err := h.service.GetMatch(r.Context(), matchID)
 	if err != nil {
-		respondError(w, http.StatusNotFound, err.Error())
+		WriteProblem(w, r, http.StatusNotFound, "Match Not Found", err.Error(), "https://api.insiderfootball.com/errors/not-found")
 		return
 	}
 
@@ -142,33 +197,46 @@ func (h *LeagueHandler) GetMatch(w http.ResponseWriter, r *http.Request) {
 // @Accept       json
 // @Produce      json
 // @Param        id   path      int  true  "Match ID"
-// @Param        body body      map[string]int true "Scores: {home_score: 1, away_score: 2}"
+// @Param        body body      EditMatchRequest true "Edited score"
 // @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  ProblemDetails
+// @Failure      500  {object}  ProblemDetails
 // @Router       /matches/{id} [put]
 func (h *LeagueHandler) EditMatch(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	matchID, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid match ID")
+		WriteProblem(w, r, http.StatusBadRequest, "Invalid Match ID", "Match ID must be an integer.", "https://api.insiderfootball.com/errors/invalid-id")
 		return
 	}
 
-	var req struct {
-		HomeScore int `json:"home_score"`
-		AwayScore int `json:"away_score"`
+	var req EditMatchRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&req); err != nil {
+		WriteProblem(w, r, http.StatusBadRequest, "Invalid Request Body", "Expected JSON with home_score and away_score.", "https://api.insiderfootball.com/errors/invalid-body")
+		return
 	}
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		respondError(w, http.StatusBadRequest, "invalid request body: expected {home_score, away_score}")
+	if err := decoder.Decode(&struct{}{}); err != io.EOF {
+		WriteProblem(w, r, http.StatusBadRequest, "Invalid Request Body", "Request body must contain a single JSON object.", "https://api.insiderfootball.com/errors/invalid-body")
+		return
+	}
+	if req.HomeScore == nil || req.AwayScore == nil {
+		WriteProblem(w, r, http.StatusBadRequest, "Invalid Request Body", "Both home_score and away_score are required.", "https://api.insiderfootball.com/errors/invalid-body")
 		return
 	}
 
-	match, err := h.service.EditMatch(r.Context(), matchID, req.HomeScore, req.AwayScore)
+	match, err := h.service.EditMatch(r.Context(), matchID, *req.HomeScore, *req.AwayScore)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, err.Error())
+		WriteProblem(w, r, http.StatusBadRequest, "Match Edit Failed", err.Error(), "https://api.insiderfootball.com/errors/edit-failed")
 		return
 	}
 
-	standings, _ := h.service.GetStandings(r.Context())
+	standings, err := h.service.GetStandings(r.Context())
+	if err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "Internal Server Error", err.Error(), "https://api.insiderfootball.com/errors/internal")
+		return
+	}
 	respondJSON(w, http.StatusOK, match, map[string]interface{}{
 		"message":   "Match updated, standings and morale recalculated",
 		"standings": standings,
@@ -181,14 +249,36 @@ func (h *LeagueHandler) EditMatch(w http.ResponseWriter, r *http.Request) {
 // @Tags         simulation
 // @Produce      json
 // @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  ProblemDetails
+// @Failure      500  {object}  ProblemDetails
 // @Router       /simulation/oracle [get]
 func (h *LeagueHandler) GetOracle(w http.ResponseWriter, r *http.Request) {
-	predictions, err := h.service.GetPredictions(r.Context())
+	ctx := r.Context()
+	currentWeek, err := h.service.GetCurrentWeek(ctx)
 	if err != nil {
-		respondError(w, http.StatusBadRequest, err.Error())
+		WriteProblem(w, r, http.StatusInternalServerError, "Internal Server Error", "Failed to resolve current schedule milestone.", "https://api.insiderfootball.com/errors/internal")
 		return
 	}
-	standings, _ := h.service.GetStandings(r.Context())
+
+	if currentWeek <= 4 {
+		WriteProblem(w, r, http.StatusBadRequest,
+			"Premature Oracle Request",
+			"Championship win probabilities are mathematically volatile and unavailable until Week 4 data constraints are met.",
+			"https://api.insiderfootball.com/errors/premature-oracle",
+		)
+		return
+	}
+
+	predictions, err := h.service.GetPredictions(ctx)
+	if err != nil {
+		WriteProblem(w, r, http.StatusBadRequest, "Oracle Error", err.Error(), "https://api.insiderfootball.com/errors/oracle-failed")
+		return
+	}
+	standings, err := h.service.GetStandings(r.Context())
+	if err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "Internal Server Error", err.Error(), "https://api.insiderfootball.com/errors/internal")
+		return
+	}
 	respondJSON(w, http.StatusOK, predictions, map[string]interface{}{
 		"simulation_count":  1000,
 		"current_standings": standings,
@@ -202,24 +292,38 @@ func (h *LeagueHandler) GetOracle(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Param        week path      int  true  "Week to rollback to"
 // @Success      200  {object}  map[string]interface{}
+// @Failure      400  {object}  ProblemDetails
+// @Failure      500  {object}  ProblemDetails
 // @Router       /league/rollback/{week} [post]
 func (h *LeagueHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
-	week, err := strconv.Atoi(vars["week"])
+	targetWeek, err := strconv.Atoi(vars["week"])
+	if err != nil || targetWeek < 0 || targetWeek > 6 {
+		WriteProblem(w, r, http.StatusBadRequest,
+			"Invalid Rollback Target Bounds",
+			"Target week must be a valid integer bounded strictly within season parameters (Weeks 0 through 6).",
+			"https://api.insiderfootball.com/errors/invalid-rollback-bounds",
+		)
+		return
+	}
+
+	if err := h.service.Rollback(r.Context(), targetWeek); err != nil {
+		WriteProblem(w, r, http.StatusBadRequest, "Rollback Failed", err.Error(), "https://api.insiderfootball.com/errors/rollback-failed")
+		return
+	}
+
+	standings, err := h.service.GetStandings(r.Context())
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid week number")
+		WriteProblem(w, r, http.StatusInternalServerError, "Internal Server Error", err.Error(), "https://api.insiderfootball.com/errors/internal")
 		return
 	}
-
-	if err := h.service.Rollback(r.Context(), week); err != nil {
-		respondError(w, http.StatusBadRequest, err.Error())
+	currentWeek, err := h.service.GetCurrentWeek(r.Context())
+	if err != nil {
+		WriteProblem(w, r, http.StatusInternalServerError, "Internal Server Error", err.Error(), "https://api.insiderfootball.com/errors/internal")
 		return
 	}
-
-	standings, _ := h.service.GetStandings(r.Context())
-	currentWeek, _ := h.service.GetCurrentWeek(r.Context())
 	respondJSON(w, http.StatusOK, nil, map[string]interface{}{
-		"message":      fmt.Sprintf("Time machine: reverted to week %d", week),
+		"message":      fmt.Sprintf("Time machine: reverted to week %d", targetWeek),
 		"current_week": currentWeek,
 		"standings":    standings,
 	})
@@ -232,18 +336,20 @@ func (h *LeagueHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 // @Produce      json
 // @Param        id   path      int  true  "Team ID"
 // @Success      200  {object}  models.TeamMetrics
+// @Failure      400  {object}  ProblemDetails
+// @Failure      404  {object}  ProblemDetails
 // @Router       /teams/{id}/metrics [get]
 func (h *LeagueHandler) GetTeamMetrics(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	teamID, err := strconv.Atoi(vars["id"])
 	if err != nil {
-		respondError(w, http.StatusBadRequest, "invalid team ID")
+		WriteProblem(w, r, http.StatusBadRequest, "Invalid Team ID", "Team ID must be an integer.", "https://api.insiderfootball.com/errors/invalid-id")
 		return
 	}
 
 	metrics, err := h.service.GetTeamMetrics(r.Context(), teamID)
 	if err != nil {
-		respondError(w, http.StatusNotFound, err.Error())
+		WriteProblem(w, r, http.StatusNotFound, "Team Not Found", err.Error(), "https://api.insiderfootball.com/errors/not-found")
 		return
 	}
 
@@ -256,10 +362,11 @@ func (h *LeagueHandler) GetTeamMetrics(w http.ResponseWriter, r *http.Request) {
 // @Tags         league
 // @Produce      json
 // @Success      200  {object}  map[string]string
+// @Failure      500  {object}  ProblemDetails
 // @Router       /league/reset [post]
 func (h *LeagueHandler) Reset(w http.ResponseWriter, r *http.Request) {
 	if err := h.service.Reset(r.Context()); err != nil {
-		respondError(w, http.StatusInternalServerError, err.Error())
+		WriteProblem(w, r, http.StatusInternalServerError, "Reset Failed", err.Error(), "https://api.insiderfootball.com/errors/reset-failed")
 		return
 	}
 	respondJSON(w, http.StatusOK, nil, map[string]string{

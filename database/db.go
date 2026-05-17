@@ -1,6 +1,7 @@
 package database
 
 import (
+	"context"
 	"database/sql"
 	"embed"
 	"fmt"
@@ -20,12 +21,22 @@ type DB struct {
 	Conn *sql.DB
 }
 
+// DBTX is the subset of database/sql used by repositories.
+// Both *sql.DB and *sql.Tx implement it, which keeps repository code reusable
+// for normal reads and transactional writes.
+type DBTX interface {
+	ExecContext(ctx context.Context, query string, args ...interface{}) (sql.Result, error)
+	QueryContext(ctx context.Context, query string, args ...interface{}) (*sql.Rows, error)
+	QueryRowContext(ctx context.Context, query string, args ...interface{}) *sql.Row
+}
+
 // NewDB creates a new database connection and initializes the schema
 func NewDB(dbPath string) (*DB, error) {
-	conn, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=on&_journal_mode=WAL")
+	conn, err := sql.Open("sqlite3", dbPath+"?_foreign_keys=on&_journal_mode=WAL&_busy_timeout=5000")
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
+	conn.SetMaxOpenConns(1)
 
 	if err := conn.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
@@ -33,16 +44,12 @@ func NewDB(dbPath string) (*DB, error) {
 
 	db := &DB{Conn: conn}
 
-	if err := db.initSchema(); err != nil {
-		return nil, fmt.Errorf("failed to initialize schema: %w", err)
-	}
-
-	log.Println("✅ Database initialized successfully")
+	log.Println("✅ Database connection established")
 	return db, nil
 }
 
-// initSchema runs database migrations using golang-migrate
-func (db *DB) initSchema() error {
+// RunMigrations runs database migrations using golang-migrate
+func (db *DB) RunMigrations() error {
 	sourceDriver, err := iofs.New(migrationsFS, "migrations")
 	if err != nil {
 		return fmt.Errorf("failed to create migration source: %w", err)

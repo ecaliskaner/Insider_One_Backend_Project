@@ -38,7 +38,7 @@ func TestMatchEngine_SimulateMatch(t *testing.T) {
 			weather:       "sunny",
 			mockFloat:     0.5,
 			mockInt:       45,
-			expectedHomeG: 2, 
+			expectedHomeG: 2,
 			expectedAwayG: 2,
 		},
 		{
@@ -50,10 +50,10 @@ func TestMatchEngine_SimulateMatch(t *testing.T) {
 				Name: "Away", BaseStrength: 50, CurrentStrength: 50, Morale: 0.0, Fatigue: 0.5,
 			},
 			weather:       "rainy",
-			mockFloat:     0.1, 
+			mockFloat:     0.1,
 			mockInt:       10,
-			expectedHomeG: 0, 
-			expectedAwayG: 0, 
+			expectedHomeG: 0,
+			expectedAwayG: 0,
 		},
 	}
 
@@ -79,5 +79,29 @@ func TestMatchEngine_SimulateMatch(t *testing.T) {
 				assert.True(t, hasQuantumVAR, "Expected a Quantum VAR Decision event")
 			}
 		})
+	}
+}
+
+func TestSeededMatchEngine_IsDeterministic(t *testing.T) {
+	home := models.Team{Name: "Home", BaseStrength: 80, CurrentStrength: 80, Morale: 0.5}
+	away := models.Team{Name: "Away", BaseStrength: 75, CurrentStrength: 75, Morale: 0.5}
+
+	engineA := NewMatchEngineWithSeed(42)
+	engineB := NewMatchEngineWithSeed(42)
+
+	homeA, awayA, eventsA := engineA.SimulateMatch(home, away, "sunny")
+	homeB, awayB, eventsB := engineB.SimulateMatch(home, away, "sunny")
+
+	assert.Equal(t, homeA, homeB)
+	assert.Equal(t, awayA, awayB)
+	assert.Equal(t, eventsA, eventsB)
+}
+
+func TestSeededWeatherAdapter_IsDeterministic(t *testing.T) {
+	weatherA := NewWeatherAdapterWithSeed(42)
+	weatherB := NewWeatherAdapterWithSeed(42)
+
+	for range 10 {
+		assert.Equal(t, weatherA.GetWeather("London"), weatherB.GetWeather("London"))
 	}
 }

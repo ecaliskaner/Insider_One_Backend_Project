@@ -3,7 +3,6 @@ package tests
 import (
 	"bytes"
 	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -13,12 +12,17 @@ import (
 	"github.com/insider/league-simulation/router"
 	"github.com/insider/league-simulation/services"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func setupTestServer() *httptest.Server {
 	// Initialize an in-memory SQLite database
 	db, err := database.NewDB(":memory:")
 	if err != nil {
+		panic(err)
+	}
+
+	if err := db.RunMigrations(); err != nil {
 		panic(err)
 	}
 
@@ -32,19 +36,28 @@ func setupTestServer() *httptest.Server {
 }
 
 func doRequest(t *testing.T, client *http.Client, method, url string, body interface{}) map[string]interface{} {
+	respData, statusCode := doRequestWithStatus(t, client, method, url, body)
+	require.Equal(t, http.StatusOK, statusCode, "Response was not successful: %v", respData)
+	assert.True(t, respData["success"].(bool), "Response was not successful: %v", respData)
+	return respData
+}
+
+func doRequestWithStatus(t *testing.T, client *http.Client, method, url string, body interface{}) (map[string]interface{}, int) {
+	t.Helper()
+
 	var reqBody []byte
 	var err error
 	if body != nil {
 		reqBody, err = json.Marshal(body)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	}
 
 	req, err := http.NewRequest(method, url, bytes.NewBuffer(reqBody))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := client.Do(req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	defer resp.Body.Close()
 
 	bodyBytes := new(bytes.Buffer)
@@ -53,15 +66,22 @@ func doRequest(t *testing.T, client *http.Client, method, url string, body inter
 
 	var respData map[string]interface{}
 	err = json.Unmarshal(bodyBytes.Bytes(), &respData)
-	assert.NoError(t, err, "Failed to decode response: %s", bodyBytes.String())
-	
-	if err != nil {
-		t.FailNow()
-	}
+	require.NoError(t, err, "Failed to decode response: %s", bodyBytes.String())
+	return respData, resp.StatusCode
+}
 
-	// Since we standardized API responses, assert "success" is true
-	assert.True(t, respData["success"].(bool), "Response was not successful: %v", respData)
-	return respData
+func resetLeague(t *testing.T, client *http.Client, baseURL string) {
+	t.Helper()
+	doRequest(t, client, "POST", baseURL+"/api/v1/league/reset", nil)
+}
+
+func playWeeks(t *testing.T, client *http.Client, baseURL string, weeks int) {
+	t.Helper()
+	for week := 1; week <= weeks; week++ {
+		resp := doRequest(t, client, "POST", baseURL+"/api/v1/league/next-week", nil)
+		meta := resp["meta"].(map[string]interface{})
+		assert.Equal(t, float64(week+1), meta["current_week"])
+	}
 }
 
 func TestE2E_LeagueFlow(t *testing.T) {
@@ -69,45 +89,178 @@ func TestE2E_LeagueFlow(t *testing.T) {
 	defer ts.Close()
 	client := ts.Client()
 
-	// 1. Reset League
-	fmt.Println("Step 1: Resetting league...")
-	doRequest(t, client, "POST", ts.URL+"/api/v1/league/reset", nil)
+	resetLeague(t, client, ts.URL)
 
-	// 2. Play 4 weeks
-	fmt.Println("Step 2: Playing 4 weeks...")
-	for i := 1; i <= 4; i++ {
-		resp := doRequest(t, client, "POST", ts.URL+"/api/v1/league/next-week", nil)
-		meta := resp["meta"].(map[string]interface{})
-		assert.Equal(t, float64(i+1), meta["current_week"])
-	}
+	playWeeks(t, client, ts.URL, 4)
 
-	// 3. Oracle (Predictions)
-	fmt.Println("Step 3: Checking Oracle predictions...")
 	resp := doRequest(t, client, "GET", ts.URL+"/api/v1/simulation/oracle", nil)
 	meta := resp["meta"].(map[string]interface{})
 	assert.Equal(t, float64(1000), meta["simulation_count"])
 	data := resp["data"].([]interface{})
 	assert.Len(t, data, 4) // 4 teams
 
-	// 4. Edit a Match (e.g., Match 1)
-	fmt.Println("Step 4: Editing match #1...")
 	editBody := map[string]int{"home_score": 5, "away_score": 0}
 	doRequest(t, client, "PUT", ts.URL+"/api/v1/matches/1", editBody)
 
-	// 5. Rollback to Week 2
-	fmt.Println("Step 5: Rolling back to week 2...")
 	resp = doRequest(t, client, "POST", ts.URL+"/api/v1/league/rollback/2", nil)
 	meta = resp["meta"].(map[string]interface{})
 	assert.Equal(t, float64(2), meta["current_week"])
 
-	// 6. Play All remaining weeks
-	fmt.Println("Step 6: Playing all remaining weeks...")
 	doRequest(t, client, "POST", ts.URL+"/api/v1/league/play-all", nil)
 
-	// Verify season is over
 	resp = doRequest(t, client, "GET", ts.URL+"/api/v1/league/table", nil)
 	meta = resp["meta"].(map[string]interface{})
 	assert.Equal(t, float64(7), meta["current_week"]) // Next week after 6 is 7
+}
 
-	fmt.Println("E2E Test completed successfully.")
+func TestPlayNextWeek_AllowsFinalWeekAndRejectsAfterSeason(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resetLeague(t, client, ts.URL)
+
+	playWeeks(t, client, ts.URL, 6)
+
+	resp, statusCode := doRequestWithStatus(t, client, "POST", ts.URL+"/api/v1/league/next-week", nil)
+	assert.Equal(t, http.StatusBadRequest, statusCode)
+	assert.Equal(t, "Season Overrun Prevented", resp["title"])
+}
+
+func TestLeagueOverview_ReturnsScreenPayloadWithoutPrematurePredictions(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resetLeague(t, client, ts.URL)
+
+	resp := doRequest(t, client, "GET", ts.URL+"/api/v1/league/overview", nil)
+	data := resp["data"].(map[string]interface{})
+
+	assert.Equal(t, float64(1), data["current_week"])
+	assert.Len(t, data["standings"], 4)
+	assert.Len(t, data["weeks"], 6)
+	assert.NotContains(t, data, "predictions")
+}
+
+func TestLeagueOverview_IncludesPredictionsAfterWeekFour(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resetLeague(t, client, ts.URL)
+	playWeeks(t, client, ts.URL, 4)
+
+	resp := doRequest(t, client, "GET", ts.URL+"/api/v1/league/overview", nil)
+	data := resp["data"].(map[string]interface{})
+
+	assert.Equal(t, float64(5), data["current_week"])
+	assert.Len(t, data["standings"], 4)
+	assert.Len(t, data["weeks"], 6)
+	assert.Len(t, data["predictions"], 4)
+}
+
+func TestEditMatch_RequiresBothScores(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resetLeague(t, client, ts.URL)
+
+	resp, statusCode := doRequestWithStatus(t, client, "PUT", ts.URL+"/api/v1/matches/1", map[string]int{
+		"home_score": 2,
+	})
+
+	assert.Equal(t, http.StatusBadRequest, statusCode)
+	assert.Equal(t, "Invalid Request Body", resp["title"])
+	assert.Equal(t, "Both home_score and away_score are required.", resp["detail"])
+}
+
+func TestEditMatch_RejectsUnknownFields(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resetLeague(t, client, ts.URL)
+
+	resp, statusCode := doRequestWithStatus(t, client, "PUT", ts.URL+"/api/v1/matches/1", map[string]int{
+		"home_score": 2,
+		"away_score": 1,
+		"bonus_goal": 1,
+	})
+
+	assert.Equal(t, http.StatusBadRequest, statusCode)
+	assert.Equal(t, "Invalid Request Body", resp["title"])
+}
+
+func TestEditMatch_RejectsNegativeScores(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resetLeague(t, client, ts.URL)
+
+	resp, statusCode := doRequestWithStatus(t, client, "PUT", ts.URL+"/api/v1/matches/1", map[string]int{
+		"home_score": -1,
+		"away_score": 1,
+	})
+
+	assert.Equal(t, http.StatusBadRequest, statusCode)
+	assert.Equal(t, "Match Edit Failed", resp["title"])
+	assert.Equal(t, "scores cannot be negative", resp["detail"])
+}
+
+func TestOracle_RejectsPrematureRequest(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resetLeague(t, client, ts.URL)
+	playWeeks(t, client, ts.URL, 3)
+
+	resp, statusCode := doRequestWithStatus(t, client, "GET", ts.URL+"/api/v1/simulation/oracle", nil)
+
+	assert.Equal(t, http.StatusBadRequest, statusCode)
+	assert.Equal(t, "Premature Oracle Request", resp["title"])
+}
+
+func TestRollback_RejectsOutOfRangeWeek(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resetLeague(t, client, ts.URL)
+
+	resp, statusCode := doRequestWithStatus(t, client, "POST", ts.URL+"/api/v1/league/rollback/7", nil)
+
+	assert.Equal(t, http.StatusBadRequest, statusCode)
+	assert.Equal(t, "Invalid Rollback Target Bounds", resp["title"])
+}
+
+func TestPlayAll_RejectsCompletedSeason(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resetLeague(t, client, ts.URL)
+	doRequest(t, client, "POST", ts.URL+"/api/v1/league/play-all", nil)
+
+	resp, statusCode := doRequestWithStatus(t, client, "POST", ts.URL+"/api/v1/league/play-all", nil)
+
+	assert.Equal(t, http.StatusBadRequest, statusCode)
+	assert.Equal(t, "Simulation Error", resp["title"])
+	assert.Equal(t, "all weeks have already been played", resp["detail"])
+}
+
+func TestGetMatch_ReturnsNotFoundForMissingMatch(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resetLeague(t, client, ts.URL)
+
+	resp, statusCode := doRequestWithStatus(t, client, "GET", ts.URL+"/api/v1/matches/999", nil)
+
+	assert.Equal(t, http.StatusNotFound, statusCode)
+	assert.Equal(t, "Match Not Found", resp["title"])
 }

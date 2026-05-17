@@ -11,6 +11,8 @@ services:
         value: 8080
       - key: DB_PATH
         value: /data/league.db
+      - key: SIM_SEED
+        value: 42
     disk:
       name: sqlite-data
       mountPath: /data

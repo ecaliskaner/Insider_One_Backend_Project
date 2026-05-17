@@ -2,17 +2,16 @@ package database
 
 import (
 	"context"
-	"database/sql"
 
 	"github.com/insider/league-simulation/models"
 )
 
 // PlayerRepo implements models.PlayerRepository
 type PlayerRepo struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewPlayerRepo(db *sql.DB) *PlayerRepo {
+func NewPlayerRepo(db DBTX) *PlayerRepo {
 	return &PlayerRepo{db: db}
 }
 
@@ -28,8 +27,13 @@ func (r *PlayerRepo) GetAll(ctx context.Context) ([]models.Player, error) {
 	var players []models.Player
 	for rows.Next() {
 		var p models.Player
-		rows.Scan(&p.ID, &p.TeamID, &p.Name, &p.Position, &p.TeamName)
+		if err := rows.Scan(&p.ID, &p.TeamID, &p.Name, &p.Position, &p.TeamName); err != nil {
+			return nil, err
+		}
 		players = append(players, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return players, nil
 }
@@ -47,8 +51,13 @@ func (r *PlayerRepo) GetByTeamID(ctx context.Context, teamID int) ([]models.Play
 	var players []models.Player
 	for rows.Next() {
 		var p models.Player
-		rows.Scan(&p.ID, &p.TeamID, &p.Name, &p.Position, &p.TeamName)
+		if err := rows.Scan(&p.ID, &p.TeamID, &p.Name, &p.Position, &p.TeamName); err != nil {
+			return nil, err
+		}
 		players = append(players, p)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return players, nil
 }
@@ -73,7 +82,10 @@ func (r *PlayerRepo) Create(ctx context.Context, player *models.Player) error {
 	if err != nil {
 		return err
 	}
-	id, _ := result.LastInsertId()
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
 	player.ID = int(id)
 	return nil
 }

@@ -19,6 +19,9 @@ func NewRouter(handler *handlers.LeagueHandler) *mux.Router {
 	// GET  /api/v1/league/table — Current standings
 	v1.HandleFunc("/league/table", handler.GetTable).Methods(http.MethodGet)
 
+	// GET  /api/v1/league/overview — Case-friendly league screen payload
+	v1.HandleFunc("/league/overview", handler.GetOverview).Methods(http.MethodGet)
+
 	// POST /api/v1/league/next-week — Simulate next week
 	v1.HandleFunc("/league/next-week", handler.PlayNextWeek).Methods(http.MethodPost)
 
@@ -45,7 +48,7 @@ func NewRouter(handler *handlers.LeagueHandler) *mux.Router {
 
 	// CORS middleware
 	r.Use(corsMiddleware)
-	
+
 	// Enterprise Middlewares
 	r.Use(middleware.PanicRecoveryMiddleware)
 	r.Use(middleware.LoggingMiddleware)

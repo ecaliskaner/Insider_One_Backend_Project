@@ -6,6 +6,8 @@ import (
 	"net/http"
 	"os"
 	"runtime/debug"
+	"strings"
+	"sync"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -17,11 +19,11 @@ var logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
 func LoggingMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
-		
+
 		// Create a custom ResponseWriter to capture the status code
 		rw := &responseWriter{w, http.StatusOK}
 		next.ServeHTTP(rw, r)
-		
+
 		duration := time.Since(start)
 		logger.Info("HTTP Request",
 			slog.String("method", r.Method),
@@ -44,22 +46,61 @@ func PanicRecoveryMiddleware(next http.Handler) http.Handler {
 				)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusInternalServerError)
-				w.Write([]byte(`{"error": "Internal Server Error"}`))
+				if _, writeErr := w.Write([]byte(`{"error": "Internal Server Error"}`)); writeErr != nil {
+					logger.Error("Failed to write panic response", slog.Any("error", writeErr))
+				}
 			}
 		}()
 		next.ServeHTTP(w, r)
 	})
 }
 
-// RateLimiterMiddleware prevents API abuse using a token bucket (100 req/sec)
+type clientLimiter struct {
+	limiter  *rate.Limiter
+	lastSeen time.Time
+}
+
+// RateLimiterMiddleware prevents API abuse using a per-client token bucket.
 func RateLimiterMiddleware(next http.Handler) http.Handler {
-	limiter := rate.NewLimiter(rate.Limit(100), 200)
+	var mu sync.Mutex
+	clients := make(map[string]*clientLimiter)
+	lastCleanup := time.Now()
+
+	getLimiter := func(ip string) *rate.Limiter {
+		mu.Lock()
+		defer mu.Unlock()
+
+		now := time.Now()
+		if now.Sub(lastCleanup) > time.Minute {
+			for clientIP, client := range clients {
+				if now.Sub(client.lastSeen) > 3*time.Minute {
+					delete(clients, clientIP)
+				}
+			}
+			lastCleanup = now
+		}
+
+		client, ok := clients[ip]
+		if !ok {
+			client = &clientLimiter{
+				limiter: rate.NewLimiter(rate.Limit(100), 200),
+			}
+			clients[ip] = client
+		}
+		client.lastSeen = now
+		return client.limiter
+	}
+
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ip := getIP(r)
+		limiter := getLimiter(ip)
 		if !limiter.Allow() {
-			logger.Warn("Rate Limit Exceeded", slog.String("ip", getIP(r)))
+			logger.Warn("Rate Limit Exceeded", slog.String("ip", ip))
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusTooManyRequests)
-			w.Write([]byte(`{"error": "Too Many Requests"}`))
+			if _, writeErr := w.Write([]byte(`{"error": "Too Many Requests"}`)); writeErr != nil {
+				logger.Error("Failed to write rate-limit response", slog.Any("error", writeErr))
+			}
 			return
 		}
 		next.ServeHTTP(w, r)
@@ -78,6 +119,18 @@ func (rw *responseWriter) WriteHeader(code int) {
 }
 
 func getIP(r *http.Request) string {
-	ip, _, _ := net.SplitHostPort(r.RemoteAddr)
+	if forwardedFor := r.Header.Get("X-Forwarded-For"); forwardedFor != "" {
+		ip := strings.TrimSpace(strings.Split(forwardedFor, ",")[0])
+		if ip != "" {
+			return ip
+		}
+	}
+	if realIP := strings.TrimSpace(r.Header.Get("X-Real-IP")); realIP != "" {
+		return realIP
+	}
+	ip, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
+	}
 	return ip
 }

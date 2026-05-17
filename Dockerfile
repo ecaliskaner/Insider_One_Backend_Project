@@ -1,4 +1,4 @@
-FROM golang:1.22-alpine AS builder
+FROM golang:1.26.3-alpine AS builder
 
 # Install GCC and musl-dev for SQLite CGO compilation
 RUN apk add --no-cache gcc musl-dev
@@ -31,5 +31,5 @@ COPY --from=builder /app/main .
 # Expose port 8080 to the outside world
 EXPOSE 8080
 
-# Command to run the executable
-CMD ["./main"]
+# Command to run the executable (stitching migration, seeding, and serving for zero-friction DX)
+CMD ["/bin/sh", "-c", "./main migrate up && ./main seed && ./main serve"]

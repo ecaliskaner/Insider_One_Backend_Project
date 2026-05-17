@@ -10,10 +10,10 @@ import (
 
 // TeamRepo implements models.TeamRepository
 type TeamRepo struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewTeamRepo(db *sql.DB) *TeamRepo {
+func NewTeamRepo(db DBTX) *TeamRepo {
 	return &TeamRepo{db: db}
 }
 
@@ -31,6 +31,9 @@ func (r *TeamRepo) GetAll(ctx context.Context) ([]models.Team, error) {
 			return nil, err
 		}
 		teams = append(teams, t)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 	return teams, nil
 }
@@ -57,7 +60,10 @@ func (r *TeamRepo) Create(ctx context.Context, team *models.Team) error {
 	if err != nil {
 		return err
 	}
-	id, _ := result.LastInsertId()
+	id, err := result.LastInsertId()
+	if err != nil {
+		return err
+	}
 	team.ID = int(id)
 	return nil
 }

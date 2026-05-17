@@ -19,13 +19,13 @@ func (m *MockWeatherAdapter) GetWeather(city string) string {
 
 func TestLeagueService_WeatherMock(t *testing.T) {
 	mockWeather := new(MockWeatherAdapter)
-	
+
 	// Setup expectations
 	mockWeather.On("GetWeather", "London").Return("rainy")
 	mockWeather.On("GetWeather", "Manchester").Return("sunny")
 
 	assert.Equal(t, "rainy", mockWeather.GetWeather("London"))
 	assert.Equal(t, "sunny", mockWeather.GetWeather("Manchester"))
-	
+
 	mockWeather.AssertExpectations(t)
 }

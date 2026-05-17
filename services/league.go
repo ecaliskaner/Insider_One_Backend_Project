@@ -11,6 +11,9 @@ type LeagueService interface {
 	// GetStandings returns the current league table (PTS, W, D, L, GD)
 	GetStandings(ctx context.Context) ([]models.Standing, error)
 
+	// GetOverview returns the case-friendly current league screen payload
+	GetOverview(ctx context.Context) (*models.LeagueOverview, error)
+
 	// PlayNextWeek simulates the next week's matches and updates state
 	PlayNextWeek(ctx context.Context) (*models.WeekResult, error)
 

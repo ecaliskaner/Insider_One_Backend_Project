@@ -10,10 +10,10 @@ import (
 
 // StandingRepo implements models.StandingRepository
 type StandingRepo struct {
-	db *sql.DB
+	db DBTX
 }
 
-func NewStandingRepo(db *sql.DB) *StandingRepo {
+func NewStandingRepo(db DBTX) *StandingRepo {
 	return &StandingRepo{db: db}
 }
 
@@ -32,11 +32,16 @@ func (r *StandingRepo) GetAll(ctx context.Context) ([]models.Standing, error) {
 	pos := 1
 	for rows.Next() {
 		var s models.Standing
-		rows.Scan(&s.TeamID, &s.TeamName, &s.Played, &s.Won, &s.Drawn, &s.Lost,
-			&s.GF, &s.GA, &s.GD, &s.Points)
+		if err := rows.Scan(&s.TeamID, &s.TeamName, &s.Played, &s.Won, &s.Drawn, &s.Lost,
+			&s.GF, &s.GA, &s.GD, &s.Points); err != nil {
+			return nil, err
+		}
 		s.Position = pos
 		pos++
 		standings = append(standings, s)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
 	}
 
 	// Apply Premier League Head-to-Head Tiebreakers
@@ -44,7 +49,7 @@ func (r *StandingRepo) GetAll(ctx context.Context) ([]models.Standing, error) {
 	if err != nil {
 		return nil, err
 	}
-	
+
 	return r.applyTiebreakers(standings, matches), nil
 }
 
@@ -213,8 +218,13 @@ func (r *StandingRepo) RecalculateAll(ctx context.Context, matches []models.Matc
 	defer rows.Close()
 	for rows.Next() {
 		var tid int
-		rows.Scan(&tid)
+		if err := rows.Scan(&tid); err != nil {
+			return err
+		}
 		standingMap[tid] = &models.Standing{TeamID: tid}
+	}
+	if err := rows.Err(); err != nil {
+		return err
 	}
 
 	for _, m := range matches {

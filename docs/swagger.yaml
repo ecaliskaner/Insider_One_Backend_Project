@@ -1,5 +1,113 @@
 basePath: /api/v1
 definitions:
+  handlers.EditMatchRequest:
+    properties:
+      away_score:
+        example: 1
+        type: integer
+      home_score:
+        example: 3
+        type: integer
+    type: object
+  handlers.ProblemDetails:
+    properties:
+      detail:
+        description: Human-readable explanation specific to this occurrence
+        type: string
+      instance:
+        description: URI reference that identifies the specific occurrence
+        type: string
+      status:
+        description: HTTP status code
+        type: integer
+      title:
+        description: Short, human-readable summary
+        type: string
+      type:
+        description: URI reference that identifies the problem type
+        type: string
+    type: object
+  models.LeagueOverview:
+    properties:
+      current_week:
+        type: integer
+      predictions:
+        items:
+          $ref: '#/definitions/models.Prediction'
+        type: array
+      standings:
+        items:
+          $ref: '#/definitions/models.Standing'
+        type: array
+      weeks:
+        items:
+          $ref: '#/definitions/models.WeekResult'
+        type: array
+    type: object
+  models.Match:
+    properties:
+      away_score:
+        description: nil if not played
+        type: integer
+      away_team:
+        type: string
+      away_team_id:
+        type: integer
+      home_score:
+        description: nil if not played
+        type: integer
+      home_team:
+        type: string
+      home_team_id:
+        type: integer
+      id:
+        type: integer
+      status:
+        description: scheduled, played, edited
+        type: string
+      weather_condition:
+        description: sunny, rainy, snowy, windy, foggy
+        type: string
+      week:
+        type: integer
+    type: object
+  models.Prediction:
+    properties:
+      championship_win_pct:
+        type: number
+      team_id:
+        type: integer
+      team_name:
+        type: string
+    type: object
+  models.Standing:
+    properties:
+      drawn:
+        type: integer
+      ga:
+        description: goals against
+        type: integer
+      gd:
+        description: goal difference
+        type: integer
+      gf:
+        description: goals for
+        type: integer
+      lost:
+        type: integer
+      played:
+        type: integer
+      points:
+        type: integer
+      position:
+        type: integer
+      team_id:
+        type: integer
+      team_name:
+        type: string
+      won:
+        type: integer
+    type: object
   models.TeamMetrics:
     properties:
       base_strength:
@@ -19,11 +127,20 @@ definitions:
       team_name:
         type: string
     type: object
+  models.WeekResult:
+    properties:
+      matches:
+        items:
+          $ref: '#/definitions/models.Match'
+        type: array
+      week:
+        type: integer
+    type: object
 host: localhost:8080
 info:
   contact: {}
-  description: This is a sophisticated league simulation API with Monte Carlo predictions
-    and Time Machine rollback.
+  description: REST API for simulating a four-team football league, editing match
+    results, rolling back state, and calculating championship probabilities.
   title: Football League Simulation API
   version: "1.0"
 paths:
@@ -38,7 +155,33 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
       summary: Simulate next week
+      tags:
+      - league
+  /league/overview:
+    get:
+      description: Returns the current league table, weekly match status, and predictions
+        when available
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.LeagueOverview'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
+      summary: Get league overview
       tags:
       - league
   /league/play-all:
@@ -52,6 +195,14 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
       summary: Play all remaining weeks
       tags:
       - league
@@ -67,6 +218,10 @@ paths:
             additionalProperties:
               type: string
             type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
       summary: Reset league
       tags:
       - league
@@ -87,6 +242,14 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
       summary: Time Machine rollback
       tags:
       - league
@@ -101,10 +264,41 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
       summary: Get current standings
       tags:
       - league
   /matches/{id}:
+    get:
+      description: Returns a specific match and its events
+      parameters:
+      - description: Match ID
+        in: path
+        name: id
+        required: true
+        type: integer
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
+      summary: Get match details
+      tags:
+      - matches
     put:
       consumes:
       - application/json
@@ -115,14 +309,12 @@ paths:
         name: id
         required: true
         type: integer
-      - description: 'Scores: {home_score: 1, away_score: 2}'
+      - description: Edited score
         in: body
         name: body
         required: true
         schema:
-          additionalProperties:
-            type: integer
-          type: object
+          $ref: '#/definitions/handlers.EditMatchRequest'
       produces:
       - application/json
       responses:
@@ -131,6 +323,14 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
       summary: Edit match result
       tags:
       - matches
@@ -146,6 +346,14 @@ paths:
           schema:
             additionalProperties: true
             type: object
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
+        "500":
+          description: Internal Server Error
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
       summary: Monte Carlo predictions
       tags:
       - simulation
@@ -166,6 +374,14 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/models.TeamMetrics'
+        "400":
+          description: Bad Request
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
+        "404":
+          description: Not Found
+          schema:
+            $ref: '#/definitions/handlers.ProblemDetails'
       summary: Get team metrics
       tags:
       - teams
