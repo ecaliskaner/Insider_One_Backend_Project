@@ -74,14 +74,14 @@ Docker Compose sets `SIM_SEED=42` so local demos are repeatable.
 
 ## Deployment
 
-The repository includes a Render blueprint in `render.yaml`. After connecting the repository to Render, create the service from the blueprint and use the deployed service URL as your live API base URL.
+The repository includes a Render blueprint in `render.yaml`. The current deployed service is:
 
 ```text
-Live API: https://<your-render-service>.onrender.com
-Swagger: https://<your-render-service>.onrender.com/swagger/index.html
+Live API: https://insider-one-backend-project.onrender.com
+Swagger: https://insider-one-backend-project.onrender.com/swagger/index.html
 ```
 
-The Postman collection uses a `base_url` variable, so it can target either `http://localhost:8080` or the deployed URL.
+The Postman collection uses a `base_url` variable. It defaults to the deployed Render URL and can be switched to `http://localhost:8080` for local review.
 
 ## Environment Variables
 

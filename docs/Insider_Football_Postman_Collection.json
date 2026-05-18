@@ -2,13 +2,13 @@
   "info": {
     "_postman_id": "4161dece-8c9e-4e4f-b673-db21de3e78a2",
     "name": "Insider Football Simulation API",
-    "description": "Reviewer-friendly collection for the Insider Football Simulation API. Set base_url to http://localhost:8080 for local review or to the deployed Render URL.",
+    "description": "Reviewer-friendly collection for the Insider Football Simulation API. base_url defaults to the deployed Render service and can be changed to http://localhost:8080 for local review.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
     {
       "key": "base_url",
-      "value": "http://localhost:8080",
+      "value": "https://insider-one-backend-project.onrender.com",
       "type": "string"
     },
     {
