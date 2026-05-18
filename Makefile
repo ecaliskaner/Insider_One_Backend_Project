@@ -1,4 +1,4 @@
-.PHONY: build run test vet verify docker-run swagger clean
+.PHONY: build run test bench vet verify docker-run swagger clean
 
 # Build the application
 build:
@@ -13,6 +13,10 @@ run: build
 # Run tests with verbose output
 test:
 	go test ./... -v
+
+# Run Oracle benchmarks
+bench:
+	go test ./services -bench=BenchmarkLeagueService_GetPredictions -benchmem -run '^$$'
 
 # Run go vet
 vet:

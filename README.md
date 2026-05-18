@@ -91,12 +91,15 @@ The Postman collection uses a `base_url` variable. It defaults to the deployed R
 | `DB_PATH` | `./league.db` | SQLite database file path |
 | `SIM_SEED` | empty | Optional integer seed for repeatable weather and match simulation |
 
+Copy `.env.example` when you want a local template for environment configuration.
+
 ## Make Targets
 
 ```bash
 make build       # Build the binary
 make run         # Build, migrate, seed, and serve
 make test        # Run the full test suite
+make bench       # Benchmark Oracle prediction generation and cache reads
 make swagger     # Regenerate Swagger artifacts
 make docker-run  # Start with Docker Compose
 make clean       # Remove local build/database files
@@ -157,6 +160,7 @@ Run:
 go test ./...
 go vet ./...
 go build ./...
+make bench
 ```
 
 The test suite includes:
@@ -164,6 +168,7 @@ The test suite includes:
 - unit tests for the match engine and league service behavior;
 - HTTP integration tests for the main league lifecycle;
 - a regression test proving week 6 can be simulated and week 7 is rejected.
+- Oracle benchmarks covering fresh prediction generation and cached reads.
 
 ## Example Requests
 
