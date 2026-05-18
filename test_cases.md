@@ -57,6 +57,10 @@ DB_PATH=<temp-db> SIM_SEED=42 go run . serve
 | TC-022 | Swagger UI | `GET /swagger/index.html` | `200 OK`; API docs are available | Documentation |
 | TC-023 | Per-client rate limiter | exhaust one client bucket, then request from another client | first client receives `429`; second client still succeeds | Middleware isolation |
 | TC-024 | Seeded simulation | run same simulation with same `SIM_SEED` | match engine and weather choices are repeatable | Demo reproducibility |
+| TC-025 | Liveness probe | `GET /healthz` | `200 OK`; returns `status: ok` | Platform health |
+| TC-026 | Readiness probe | `GET /readyz` | `200 OK` when database ping succeeds; `503` if storage is unavailable | Platform readiness |
+| TC-027 | Preserve request ID | request with `X-Request-ID` | Response includes the same `X-Request-ID` value | Trace correlation |
+| TC-028 | Generate request ID | request without `X-Request-ID` | Response includes a generated `X-Request-ID` value | Trace correlation |
 
 ## Edge Cases Covered By Automated Tests
 
@@ -73,6 +77,10 @@ DB_PATH=<temp-db> SIM_SEED=42 go run . serve
 | Completed season rejects another play-all | `TestPlayAll_RejectsCompletedSeason` |
 | Missing match returns 404 | `TestGetMatch_ReturnsNotFoundForMissingMatch` |
 | Per-client rate limiting does not block other clients | `TestRateLimiterMiddleware_IsPerClient` |
+| Health and readiness probes return success when dependencies are available | `TestHealthAndReadinessEndpoints` |
+| Readiness returns 503 when the database is unavailable | `TestReadyz_ReturnsUnavailableWithoutDatabase` |
+| Incoming request IDs are preserved | `TestRequestIDHeader_IsReturned`, `TestRequestIDMiddleware_PreservesInboundID` |
+| Missing request IDs are generated | `TestRequestIDMiddleware_GeneratesMissingID` |
 | Seeded simulation is deterministic | `TestSeededMatchEngine_IsDeterministic`, `TestSeededWeatherAdapter_IsDeterministic` |
 
 ## Latest Local Verification Result

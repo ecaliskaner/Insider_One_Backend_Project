@@ -51,7 +51,7 @@ var serveCmd = &cobra.Command{
 		leagueHandler := handlers.NewLeagueHandler(leagueService)
 
 		// Setup router
-		r := router.NewRouter(leagueHandler)
+		r := router.NewRouter(leagueHandler, db)
 
 		// Start server
 		log.Println("╔══════════════════════════════════════════════╗")

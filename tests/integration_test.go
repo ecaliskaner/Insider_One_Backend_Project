@@ -31,7 +31,7 @@ func setupTestServer() *httptest.Server {
 	leagueService := services.NewLeagueService(db, engine, weather)
 	handler := handlers.NewLeagueHandler(leagueService)
 
-	r := router.NewRouter(handler)
+	r := router.NewRouter(handler, db)
 	return httptest.NewServer(r)
 }
 
@@ -111,6 +111,35 @@ func TestE2E_LeagueFlow(t *testing.T) {
 	resp = doRequest(t, client, "GET", ts.URL+"/api/v1/league/table", nil)
 	meta = resp["meta"].(map[string]interface{})
 	assert.Equal(t, float64(7), meta["current_week"]) // Next week after 6 is 7
+}
+
+func TestHealthAndReadinessEndpoints(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resp := doRequest(t, client, "GET", ts.URL+"/healthz", nil)
+	assert.Equal(t, "ok", resp["data"].(map[string]interface{})["status"])
+
+	resp = doRequest(t, client, "GET", ts.URL+"/readyz", nil)
+	assert.Equal(t, "ready", resp["data"].(map[string]interface{})["status"])
+}
+
+func TestRequestIDHeader_IsReturned(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/healthz", nil)
+	require.NoError(t, err)
+	req.Header.Set("X-Request-ID", "case-review-123")
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "case-review-123", resp.Header.Get("X-Request-ID"))
 }
 
 func TestPlayNextWeek_AllowsFinalWeekAndRejectsAfterSeason(t *testing.T) {

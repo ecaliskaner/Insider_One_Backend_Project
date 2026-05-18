@@ -1,6 +1,9 @@
 package middleware
 
 import (
+	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"log/slog"
 	"net"
 	"net/http"
@@ -14,6 +17,30 @@ import (
 )
 
 var logger = slog.New(slog.NewJSONHandler(os.Stdout, nil))
+
+type requestIDContextKey struct{}
+
+const RequestIDHeader = "X-Request-ID"
+
+// RequestIDFromContext returns the request ID stored by RequestIDMiddleware.
+func RequestIDFromContext(ctx context.Context) string {
+	requestID, _ := ctx.Value(requestIDContextKey{}).(string)
+	return requestID
+}
+
+// RequestIDMiddleware preserves an inbound request ID or creates one for tracing.
+func RequestIDMiddleware(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		requestID := strings.TrimSpace(r.Header.Get(RequestIDHeader))
+		if requestID == "" {
+			requestID = newRequestID()
+		}
+
+		w.Header().Set(RequestIDHeader, requestID)
+		ctx := context.WithValue(r.Context(), requestIDContextKey{}, requestID)
+		next.ServeHTTP(w, r.WithContext(ctx))
+	})
+}
 
 // LoggingMiddleware logs HTTP requests in structured JSON format
 func LoggingMiddleware(next http.Handler) http.Handler {
@@ -31,6 +58,7 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 			slog.Int("status", rw.statusCode),
 			slog.String("duration", duration.String()),
 			slog.String("ip", getIP(r)),
+			slog.String("request_id", RequestIDFromContext(r.Context())),
 		)
 	})
 }
@@ -133,4 +161,12 @@ func getIP(r *http.Request) string {
 		return r.RemoteAddr
 	}
 	return ip
+}
+
+func newRequestID() string {
+	var bytes [16]byte
+	if _, err := rand.Read(bytes[:]); err != nil {
+		return hex.EncodeToString([]byte(time.Now().UTC().Format(time.RFC3339Nano)))
+	}
+	return hex.EncodeToString(bytes[:])
 }
