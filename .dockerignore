@@ -1,0 +1,10 @@
+.git
+.github
+.env
+*.db
+*.db-shm
+*.db-wal
+*.exe
+*.test
+docs/*.png
+tmp

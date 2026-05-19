@@ -19,6 +19,7 @@ gofmt -l .
 go test ./...
 go vet ./...
 go build ./...
+docker build -t insider-one-backend-project:review .
 ```
 
 Manual API verification can be run against a local server:
@@ -61,6 +62,11 @@ DB_PATH=<temp-db> SIM_SEED=42 go run . serve
 | TC-026 | Readiness probe | `GET /readyz` | `200 OK` when database ping succeeds; `503` if storage is unavailable | Platform readiness |
 | TC-027 | Preserve request ID | request with `X-Request-ID` | Response includes the same `X-Request-ID` value | Trace correlation |
 | TC-028 | Generate request ID | request without `X-Request-ID` | Response includes a generated `X-Request-ID` value | Trace correlation |
+| TC-029 | Malformed JSON edit body | `PUT /api/v1/matches/1` with invalid JSON | `400 Bad Request`; problem response explains malformed JSON | Request validation |
+| TC-030 | Wrong edit content type | `PUT /api/v1/matches/1` with `text/plain` | `400 Bad Request`; content type is rejected | Request validation |
+| TC-031 | Edit scheduled match | `PUT /api/v1/matches/1` before it has been played | `400 Bad Request`; only played matches can be edited | Domain validation |
+| TC-032 | Duplicate rollback | repeat `POST /api/v1/league/rollback/2` | `200 OK`; rollback is idempotent and standings remain consistent | Rebuild consistency |
+| TC-033 | Invalid team ID format | `GET /api/v1/teams/not-a-number/metrics` | `400 Bad Request`; team ID must be numeric | Request validation |
 
 ## Edge Cases Covered By Automated Tests
 
@@ -72,10 +78,15 @@ DB_PATH=<temp-db> SIM_SEED=42 go run . serve
 | Missing edit score is rejected | `TestEditMatch_RequiresBothScores` |
 | Unknown edit field is rejected | `TestEditMatch_RejectsUnknownFields` |
 | Negative edit score is rejected | `TestEditMatch_RejectsNegativeScores` |
+| Malformed JSON edit body is rejected | `TestEditMatch_RejectsMalformedJSON` |
+| Wrong edit content type is rejected | `TestEditMatch_RejectsWrongContentType` |
+| Scheduled match edit is rejected | `TestEditMatch_RejectsScheduledMatch` |
 | Premature championship probability request is rejected | `TestChampionshipProbabilities_RejectPrematureRequest` |
 | Out-of-range rollback is rejected | `TestRollback_RejectsOutOfRangeWeek` |
+| Duplicate rollback is idempotent and preserves standings rebuild consistency | `TestRollback_IsIdempotentAndPreservesRebuildConsistency` |
 | Completed season rejects another play-all | `TestPlayAll_RejectsCompletedSeason` |
 | Missing match returns 404 | `TestGetMatch_ReturnsNotFoundForMissingMatch` |
+| Invalid team ID format is rejected | `TestTeamMetrics_RejectsInvalidTeamID` |
 | Per-client rate limiting does not block other clients | `TestRateLimiterMiddleware_IsPerClient` |
 | Health and readiness probes return success when dependencies are available | `TestHealthAndReadinessEndpoints` |
 | Readiness returns 503 when the database is unavailable | `TestReadyz_ReturnsUnavailableWithoutDatabase` |

@@ -285,6 +285,9 @@ func (s *LeagueServiceImpl) EditMatch(ctx context.Context, matchID int, homeScor
 		if homeScore < 0 || awayScore < 0 {
 			return fmt.Errorf("scores cannot be negative")
 		}
+		if match.Status != "played" && match.Status != "edited" {
+			return fmt.Errorf("only played matches can be edited")
+		}
 
 		match.HomeScore = &homeScore
 		match.AwayScore = &awayScore

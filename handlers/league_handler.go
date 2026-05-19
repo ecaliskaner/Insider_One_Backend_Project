@@ -3,13 +3,10 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
 
 	"github.com/ecaliskaner/Insider_One_Backend_Project/services"
-	"github.com/gorilla/mux"
 )
 
 // LeagueHandler handles HTTP requests for the league API
@@ -171,10 +168,9 @@ func (h *LeagueHandler) PlayAll(w http.ResponseWriter, r *http.Request) {
 // @Failure      404  {object}  ProblemDetails
 // @Router       /matches/{id} [get]
 func (h *LeagueHandler) GetMatch(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	matchID, err := strconv.Atoi(vars["id"])
+	matchID, err := parsePathInt(r, "id", "Match ID")
 	if err != nil {
-		WriteProblem(w, r, http.StatusBadRequest, "Invalid Match ID", "Match ID must be an integer.", "https://api.insiderfootball.com/errors/invalid-id")
+		WriteProblem(w, r, http.StatusBadRequest, "Invalid Match ID", err.Error()+".", "https://api.insiderfootball.com/errors/invalid-id")
 		return
 	}
 
@@ -203,26 +199,19 @@ func (h *LeagueHandler) GetMatch(w http.ResponseWriter, r *http.Request) {
 // @Failure      500  {object}  ProblemDetails
 // @Router       /matches/{id} [put]
 func (h *LeagueHandler) EditMatch(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	matchID, err := strconv.Atoi(vars["id"])
+	matchID, err := parsePathInt(r, "id", "Match ID")
 	if err != nil {
-		WriteProblem(w, r, http.StatusBadRequest, "Invalid Match ID", "Match ID must be an integer.", "https://api.insiderfootball.com/errors/invalid-id")
+		WriteProblem(w, r, http.StatusBadRequest, "Invalid Match ID", err.Error()+".", "https://api.insiderfootball.com/errors/invalid-id")
 		return
 	}
 
 	var req EditMatchRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil {
-		WriteProblem(w, r, http.StatusBadRequest, "Invalid Request Body", "Expected JSON with home_score and away_score.", "https://api.insiderfootball.com/errors/invalid-body")
+	if err := decodeStrictJSON(w, r, &req); err != nil {
+		WriteProblem(w, r, http.StatusBadRequest, "Invalid Request Body", err.Error()+".", "https://api.insiderfootball.com/errors/invalid-body")
 		return
 	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		WriteProblem(w, r, http.StatusBadRequest, "Invalid Request Body", "Request body must contain a single JSON object.", "https://api.insiderfootball.com/errors/invalid-body")
-		return
-	}
-	if req.HomeScore == nil || req.AwayScore == nil {
-		WriteProblem(w, r, http.StatusBadRequest, "Invalid Request Body", "Both home_score and away_score are required.", "https://api.insiderfootball.com/errors/invalid-body")
+	if err := validateEditMatchRequest(req); err != nil {
+		WriteProblem(w, r, http.StatusBadRequest, "Invalid Request Body", err.Error()+".", "https://api.insiderfootball.com/errors/invalid-body")
 		return
 	}
 
@@ -296,12 +285,11 @@ func (h *LeagueHandler) GetChampionshipProbabilities(w http.ResponseWriter, r *h
 // @Failure      500  {object}  ProblemDetails
 // @Router       /league/rollback/{week} [post]
 func (h *LeagueHandler) Rollback(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	targetWeek, err := strconv.Atoi(vars["week"])
-	if err != nil || targetWeek < 0 || targetWeek > 6 {
+	targetWeek, err := parseBoundedPathInt(r, "week", "Target week", 0, 6)
+	if err != nil {
 		WriteProblem(w, r, http.StatusBadRequest,
 			"Invalid Rollback Target Bounds",
-			"Target week must be a valid integer bounded strictly within season parameters (Weeks 0 through 6).",
+			err.Error()+".",
 			"https://api.insiderfootball.com/errors/invalid-rollback-bounds",
 		)
 		return
@@ -323,7 +311,7 @@ func (h *LeagueHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondJSON(w, http.StatusOK, nil, map[string]interface{}{
-		"message":      fmt.Sprintf("Time machine: reverted to week %d", targetWeek),
+		"message":      fmt.Sprintf("Rollback completed to week %d", targetWeek),
 		"current_week": currentWeek,
 		"standings":    standings,
 	})
@@ -340,10 +328,9 @@ func (h *LeagueHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 // @Failure      404  {object}  ProblemDetails
 // @Router       /teams/{id}/metrics [get]
 func (h *LeagueHandler) GetTeamMetrics(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	teamID, err := strconv.Atoi(vars["id"])
+	teamID, err := parsePathInt(r, "id", "Team ID")
 	if err != nil {
-		WriteProblem(w, r, http.StatusBadRequest, "Invalid Team ID", "Team ID must be an integer.", "https://api.insiderfootball.com/errors/invalid-id")
+		WriteProblem(w, r, http.StatusBadRequest, "Invalid Team ID", err.Error()+".", "https://api.insiderfootball.com/errors/invalid-id")
 		return
 	}
 
