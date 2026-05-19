@@ -20,7 +20,9 @@ A Go REST API that simulates a four-team football league. It supports week-by-we
 .
 |-- cmd/                    # CLI commands: serve, migrate, seed
 |-- database/               # SQLite connection, migrations, seed data, repositories
-|-- docs/                   # Swagger/OpenAPI artifacts and Postman collection
+|-- docs/                   # Swagger/OpenAPI artifacts, Postman collection, and review notes
+|   |-- case/                # Original hiring task PDF
+|   `-- review-notes/        # Prompts, manual test notes, and case-fix notes
 |-- handlers/               # HTTP handlers and problem+json errors
 |-- middleware/             # logging, panic recovery, rate limiting
 |-- models/                 # domain models and repository interfaces
@@ -181,6 +183,8 @@ Detailed schema notes and key repository queries are documented in `docs/sql.md`
 
 Championship probability logic is documented in `docs/simulation.md`.
 
+Prompt history, manual test notes, and earlier review/fix notes are grouped under `docs/review-notes/` so the repository root stays focused on runnable project files.
+
 ## Consistency And Error Handling
 
 The service serializes league state mutations with an application-level lock. Multi-table write operations such as playing a week, editing a result, rollback, and reset are wrapped in SQL transactions so partial state is not committed if a step fails.
@@ -237,4 +241,4 @@ curl -X POST http://localhost:8080/api/v1/league/rollback/3
 
 ## Notes For Reviewers
 
-This is a compact internship-case backend, not a production service. The code now favors clear service/repository boundaries, explicit error handling, transactional writes, and runnable local/Docker workflows. Reasonable next improvements would be broader negative-path tests, stricter request validation, request-scoped rate limiting, and reducing generated Swagger artifacts in normal review diffs.
+This is a compact internship-case backend, not a production service. The code favors clear service/repository boundaries, explicit error handling, transactional writes, validation before mutation, and runnable local/Docker workflows. The remaining production-level improvements would be replacing SQLite with a server database, adding persistent observability, and splitting generated Swagger artifacts from hand-written docs in larger review diffs.

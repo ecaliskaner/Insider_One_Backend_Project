@@ -32,7 +32,7 @@ var serveCmd = &cobra.Command{
 		// Initialize database (only connects and auto-migrates if enabled)
 		db, err := database.NewDB(dbPath)
 		if err != nil {
-			log.Fatalf("❌ Failed to initialize database: %v", err)
+			log.Fatalf("failed to initialize database: %v", err)
 		}
 		defer func() {
 			if err := db.Close(); err != nil {
@@ -40,7 +40,7 @@ var serveCmd = &cobra.Command{
 			}
 		}()
 
-		// Initialize services (Adapter pattern — external APIs injected)
+		// Initialize services with optional external adapters.
 		matchEngine := services.NewMatchEngine()
 		weatherAdapter := services.NewWeatherAdapter()
 		if simSeed != "" {
@@ -65,20 +65,17 @@ var serveCmd = &cobra.Command{
 		r := router.NewRouter(leagueHandler, db)
 
 		// Start server
-		log.Println("╔══════════════════════════════════════════════╗")
-		log.Println("║   ⚽ Football League Simulation API v1       ║")
-		log.Printf("║   🌐 http://localhost:%s                    ║\n", port)
-		log.Println("╚══════════════════════════════════════════════╝")
-		log.Println("")
-		log.Println("📡 Endpoints:")
-		log.Println("  GET    /api/v1/league/table            — League standings")
-		log.Println("  POST   /api/v1/league/next-week        — Simulate next week")
-		log.Println("  POST   /api/v1/league/play-all         — Play all remaining")
-		log.Println("  PUT    /api/v1/matches/{id}            — Edit match result")
-		log.Println("  GET    /api/v1/simulation/championship-probabilities — Championship probabilities")
-		log.Println("  POST   /api/v1/league/rollback/{week}  — Rollback league state")
-		log.Println("  GET    /api/v1/teams/{id}/metrics      — Team metrics")
-		log.Println("  POST   /api/v1/league/reset            — Reset league")
+		log.Println("Football League Simulation API v1")
+		log.Printf("Listening on http://localhost:%s\n", port)
+		log.Println("Endpoints:")
+		log.Println("  GET    /api/v1/league/table")
+		log.Println("  POST   /api/v1/league/next-week")
+		log.Println("  POST   /api/v1/league/play-all")
+		log.Println("  PUT    /api/v1/matches/{id}")
+		log.Println("  GET    /api/v1/simulation/championship-probabilities")
+		log.Println("  POST   /api/v1/league/rollback/{week}")
+		log.Println("  GET    /api/v1/teams/{id}/metrics")
+		log.Println("  POST   /api/v1/league/reset")
 		log.Println("")
 
 		// Configure HTTP Server
@@ -99,23 +96,23 @@ var serveCmd = &cobra.Command{
 		// Start server in a separate goroutine
 		go func() {
 			if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
-				log.Fatalf("❌ Server failed: %v", err)
+				log.Fatalf("server failed: %v", err)
 			}
 		}()
 
 		// Block until a signal is received
 		<-quit
-		log.Println("\n⚠️ Shutting down server gracefully...")
+		log.Println("Shutting down server gracefully...")
 
 		// Create a deadline to wait for active requests
 		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 		defer cancel()
 
 		if err := srv.Shutdown(ctx); err != nil {
-			log.Fatalf("❌ Server forced to shutdown: %v", err)
+			log.Fatalf("server forced to shutdown: %v", err)
 		}
 
-		log.Println("✅ Server exited cleanly.")
+		log.Println("Server exited cleanly.")
 	},
 }
 

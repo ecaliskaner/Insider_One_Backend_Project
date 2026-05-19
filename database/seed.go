@@ -84,7 +84,7 @@ func SeedTeamsContext(ctx context.Context, store DBTX) error {
 		return fmt.Errorf("failed to count teams: %w", err)
 	}
 	if count > 0 {
-		log.Println("⏭ Teams already seeded, skipping...")
+		log.Println("Teams already seeded, skipping...")
 		return nil
 	}
 
@@ -101,7 +101,7 @@ func SeedTeamsContext(ctx context.Context, store DBTX) error {
 		}
 	}
 
-	log.Printf("✅ Seeded %d teams\n", len(teams))
+	log.Printf("Seeded %d teams\n", len(teams))
 	return nil
 }
 
@@ -117,7 +117,7 @@ func SeedPlayersContext(ctx context.Context, store DBTX) error {
 		return fmt.Errorf("failed to count players: %w", err)
 	}
 	if count > 0 {
-		log.Println("⏭ Players already seeded, skipping...")
+		log.Println("Players already seeded, skipping...")
 		return nil
 	}
 
@@ -160,7 +160,7 @@ func SeedPlayersContext(ctx context.Context, store DBTX) error {
 		}
 	}
 
-	log.Printf("✅ Seeded %d players\n", total)
+	log.Printf("Seeded %d players\n", total)
 	return nil
 }
 
@@ -176,7 +176,7 @@ func SeedStandingsContext(ctx context.Context, store DBTX) error {
 		return fmt.Errorf("failed to count standings: %w", err)
 	}
 	if count > 0 {
-		log.Println("⏭ Standings already seeded, skipping...")
+		log.Println("Standings already seeded, skipping...")
 		return nil
 	}
 
@@ -211,7 +211,7 @@ func SeedStandingsContext(ctx context.Context, store DBTX) error {
 		}
 	}
 
-	log.Println("✅ Initialized standings")
+	log.Println("Initialized standings")
 	return nil
 }
 
@@ -228,7 +228,7 @@ func GenerateScheduleContext(ctx context.Context, store DBTX) error {
 		return fmt.Errorf("failed to count matches: %w", err)
 	}
 	if count > 0 {
-		log.Println("⏭ Schedule already generated, skipping...")
+		log.Println("Schedule already generated, skipping...")
 		return nil
 	}
 
@@ -293,6 +293,6 @@ func GenerateScheduleContext(ctx context.Context, store DBTX) error {
 		}
 	}
 
-	log.Println("✅ Generated 12 matches across 6 weeks")
+	log.Println("Generated 12 matches across 6 weeks")
 	return nil
 }

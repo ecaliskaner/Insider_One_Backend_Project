@@ -16,7 +16,7 @@ var seedCmd = &cobra.Command{
 
 		db, err := database.NewDB(dbPath)
 		if err != nil {
-			log.Fatalf("❌ Failed to initialize database: %v", err)
+			log.Fatalf("failed to initialize database: %v", err)
 		}
 		defer func() {
 			if err := db.Close(); err != nil {
@@ -24,22 +24,22 @@ var seedCmd = &cobra.Command{
 			}
 		}()
 
-		log.Println("🌱 Seeding database...")
+		log.Println("Seeding database...")
 
 		if err := database.SeedTeams(db); err != nil {
-			log.Fatalf("❌ Failed to seed teams: %v", err)
+			log.Fatalf("failed to seed teams: %v", err)
 		}
 		if err := database.SeedPlayers(db); err != nil {
-			log.Fatalf("❌ Failed to seed players: %v", err)
+			log.Fatalf("failed to seed players: %v", err)
 		}
 		if err := database.SeedStandings(db); err != nil {
-			log.Fatalf("❌ Failed to seed standings: %v", err)
+			log.Fatalf("failed to seed standings: %v", err)
 		}
 		if err := database.GenerateSchedule(db); err != nil {
-			log.Fatalf("❌ Failed to generate schedule: %v", err)
+			log.Fatalf("failed to generate schedule: %v", err)
 		}
 
-		log.Println("✅ Database seeded successfully!")
+		log.Println("Database seeded successfully.")
 	},
 }
 

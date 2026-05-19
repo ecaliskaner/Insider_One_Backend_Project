@@ -44,7 +44,7 @@ func NewDB(dbPath string) (*DB, error) {
 
 	db := &DB{Conn: conn}
 
-	log.Println("✅ Database connection established")
+	log.Println("Database connection established")
 	return db, nil
 }
 

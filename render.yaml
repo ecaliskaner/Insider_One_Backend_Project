@@ -5,7 +5,7 @@ services:
     dockerfilePath: Dockerfile
     autoDeploy: true
     branch: main
-    healthCheckPath: /api/v1/league/table
+    healthCheckPath: /readyz
     envVars:
       - key: PORT
         value: 8080
