@@ -10,6 +10,7 @@ This document describes the reviewer-facing test coverage for the Insider Footba
 | Database | SQLite |
 | Local base URL | `http://localhost:8080` |
 | Deterministic seed | `SIM_SEED=42` |
+| Weather provider | `WEATHER_PROVIDER=local` |
 | Test database | Temporary SQLite file |
 
 ## Verification Commands
@@ -58,6 +59,8 @@ DB_PATH=<temp-db> SIM_SEED=42 go run . serve
 | TC-022 | Swagger UI | `GET /swagger/index.html` | `200 OK`; API docs are available | Documentation |
 | TC-023 | Per-client rate limiter | exhaust one client bucket, then request from another client | first client receives `429`; second client still succeeds | Middleware isolation |
 | TC-024 | Seeded simulation | run same simulation with same `SIM_SEED` | match engine and weather choices are repeatable | Demo reproducibility |
+| TC-024A | Open-Meteo adapter success | fake Open-Meteo server returns current weather | weather code is normalized and cached | External adapter |
+| TC-024B | Open-Meteo adapter failure | fake Open-Meteo server returns an error | local fallback weather is used | External resilience |
 | TC-025 | Liveness probe | `GET /healthz` | `200 OK`; returns `status: ok` | Platform health |
 | TC-026 | API-scoped health probe | `GET /api/v1/health` | `200 OK`; returns `status: ok` | API health |
 | TC-027 | Readiness probe | `GET /readyz` | `200 OK` when database ping succeeds; `503` if storage is unavailable | Platform readiness |
@@ -94,6 +97,7 @@ DB_PATH=<temp-db> SIM_SEED=42 go run . serve
 | Incoming request IDs are preserved | `TestRequestIDHeader_IsReturned`, `TestRequestIDMiddleware_PreservesInboundID` |
 | Missing request IDs are generated | `TestRequestIDMiddleware_GeneratesMissingID` |
 | Seeded simulation is deterministic | `TestSeededMatchEngine_IsDeterministic`, `TestSeededWeatherAdapter_IsDeterministic` |
+| Open-Meteo weather is mapped, cached, and resilient | `TestOpenMeteoWeatherAdapter_MapsCurrentWeather`, `TestOpenMeteoWeatherAdapter_FallsBackOnProviderError`, `TestMapOpenMeteoCondition` |
 
 ## Latest Local Verification Result
 

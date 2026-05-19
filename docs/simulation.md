@@ -20,6 +20,20 @@ Each simulation starts from the current persisted league state:
 
 Played and edited matches are treated as facts. Only scheduled matches are simulated.
 
+## Weather Provider
+
+The match engine receives one normalized weather condition per fixture: `sunny`, `rainy`, `snowy`, `windy`, or `foggy`.
+
+By default, weather comes from the local adapter so tests, Docker, and demos remain deterministic. If `WEATHER_PROVIDER=open-meteo` is set, the service calls Open-Meteo's forecast API with each home team's city coordinates and requests current `weather_code` and `wind_speed_10m`.
+
+The Open-Meteo adapter is intentionally defensive:
+
+- 2-second HTTP timeout;
+- in-memory cache;
+- no API key required;
+- local fallback when a city is unknown or the provider returns an error;
+- normalized output so the match engine stays decoupled from external API response details.
+
 ## Simulation Loop
 
 The service runs 1,000 Monte Carlo simulations. In each simulation:

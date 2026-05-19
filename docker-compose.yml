@@ -12,6 +12,7 @@ services:
       - PORT=8080
       - DB_PATH=/app/data/league.db
       - SIM_SEED=42
+      - WEATHER_PROVIDER=local
     command: /bin/sh -c "./main migrate up && ./main seed && ./main serve"
     restart: unless-stopped
 

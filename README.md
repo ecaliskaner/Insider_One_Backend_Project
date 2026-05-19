@@ -91,8 +91,11 @@ The Postman collection uses a `base_url` variable. It defaults to the deployed R
 | `PORT` | `8080` | HTTP server port |
 | `DB_PATH` | `./league.db` | SQLite database file path |
 | `SIM_SEED` | empty | Optional integer seed for repeatable weather and match simulation |
+| `WEATHER_PROVIDER` | `local` | Weather source: `local` or `open-meteo` |
 
 Copy `.env.example` when you want a local template for environment configuration.
+
+`WEATHER_PROVIDER=open-meteo` enables live weather from Open-Meteo for known team cities. The adapter uses a short timeout, in-memory cache, and local fallback so simulations continue if the external API is unavailable.
 
 ## Architecture Flow
 
@@ -150,6 +153,7 @@ The importable OpenAPI spec is also available at `openapi.yaml` in the repositor
 - A win is worth 3 points, a draw 1 point, and a loss 0 points.
 - Standings are ordered by points, goal difference, goals for, then tied-team head-to-head rules where available.
 - Match simulation uses team strength, morale, fatigue, weather, and home advantage.
+- Weather can come from the local deterministic adapter or Open-Meteo via the `WEATHER_PROVIDER` setting.
 - Editing a match result triggers a full state rebuild.
 - Rollback resets matches and events from the target week onward, then rebuilds standings and team metrics.
 - Championship probabilities are available after enough weeks have been played and are cached until league state changes.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/ecaliskaner/Insider_One_Backend_Project/services"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -34,4 +35,5 @@ func initConfig() {
 	viper.SetDefault("PORT", "8080")
 	viper.SetDefault("DB_PATH", "./league.db")
 	viper.SetDefault("SIM_SEED", "")
+	viper.SetDefault("WEATHER_PROVIDER", services.WeatherProviderLocal)
 }

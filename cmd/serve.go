@@ -25,6 +25,7 @@ var serveCmd = &cobra.Command{
 		dbPath := viper.GetString("DB_PATH")
 		port := viper.GetString("PORT")
 		simSeed := viper.GetString("SIM_SEED")
+		weatherProvider := viper.GetString("WEATHER_PROVIDER")
 
 		// Initialize database (only connects and auto-migrates if enabled)
 		db, err := database.NewDB(dbPath)
@@ -45,7 +46,9 @@ var serveCmd = &cobra.Command{
 			weatherAdapter = services.NewWeatherAdapterWithSeed(seed + 1)
 			log.Printf("Using deterministic simulation seed: %d", seed)
 		}
-		leagueService := services.NewLeagueService(db, matchEngine, weatherAdapter)
+		weather := services.NewWeatherAdapterByProvider(weatherProvider, weatherAdapter)
+		log.Printf("Using weather provider: %s", weatherProvider)
+		leagueService := services.NewLeagueService(db, matchEngine, weather)
 
 		// Initialize handlers
 		leagueHandler := handlers.NewLeagueHandler(leagueService)
