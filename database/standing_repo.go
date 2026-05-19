@@ -25,7 +25,9 @@ func (r *StandingRepo) GetAll(ctx context.Context) ([]models.Standing, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var standings []models.Standing
 	pos := 1
@@ -60,7 +62,9 @@ func (r *StandingRepo) getAllPlayedMatches(ctx context.Context) ([]models.Match,
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var matches []models.Match
 	for rows.Next() {
@@ -115,7 +119,9 @@ func (r *StandingRepo) RecalculateAll(ctx context.Context, matches []models.Matc
 	if err != nil {
 		return err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 	for rows.Next() {
 		var tid int
 		if err := rows.Scan(&tid); err != nil {

@@ -23,7 +23,9 @@ func (r *EventRepo) GetByMatchID(ctx context.Context, matchID int) ([]models.Mat
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var events []models.MatchEvent
 	for rows.Next() {

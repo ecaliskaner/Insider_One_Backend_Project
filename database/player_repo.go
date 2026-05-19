@@ -22,7 +22,9 @@ func (r *PlayerRepo) GetAll(ctx context.Context) ([]models.Player, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var players []models.Player
 	for rows.Next() {
@@ -46,7 +48,9 @@ func (r *PlayerRepo) GetByTeamID(ctx context.Context, teamID int) ([]models.Play
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var players []models.Player
 	for rows.Next() {

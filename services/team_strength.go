@@ -159,10 +159,12 @@ func (p *TransfermarktTeamStrengthProvider) fetchMarketValue(ctx context.Context
 	if err != nil {
 		return 0, fmt.Errorf("call Transfermarkt provider: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
-		return 0, fmt.Errorf("Transfermarkt provider returned status %d", resp.StatusCode)
+		return 0, fmt.Errorf("transfermarkt provider returned status %d", resp.StatusCode)
 	}
 
 	var payload interface{}

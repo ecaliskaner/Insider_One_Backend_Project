@@ -58,10 +58,13 @@ func doRequestWithStatus(t *testing.T, client *http.Client, method, url string, 
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() {
+		require.NoError(t, resp.Body.Close())
+	}()
 
 	bodyBytes := new(bytes.Buffer)
-	bodyBytes.ReadFrom(resp.Body)
+	_, err = bodyBytes.ReadFrom(resp.Body)
+	require.NoError(t, err)
 	// fmt.Println("Response Body:", bodyBytes.String())
 
 	var respData map[string]interface{}
@@ -81,7 +84,9 @@ func doRawRequestWithStatus(t *testing.T, client *http.Client, method, url, cont
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() {
+		require.NoError(t, resp.Body.Close())
+	}()
 
 	bodyBytes := new(bytes.Buffer)
 	_, err = bodyBytes.ReadFrom(resp.Body)
@@ -167,7 +172,9 @@ func TestRequestIDHeader_IsReturned(t *testing.T) {
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	defer resp.Body.Close()
+	defer func() {
+		require.NoError(t, resp.Body.Close())
+	}()
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "case-review-123", resp.Header.Get("X-Request-ID"))

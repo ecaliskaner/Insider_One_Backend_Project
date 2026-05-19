@@ -131,13 +131,13 @@ func SeedPlayersContext(ctx context.Context, store DBTX) error {
 		var id int
 		var name string
 		if err := rows.Scan(&id, &name); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return err
 		}
 		teamIDs[name] = id
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return err
 	}
 	if err := rows.Close(); err != nil {
@@ -189,13 +189,13 @@ func SeedStandingsContext(ctx context.Context, store DBTX) error {
 	for rows.Next() {
 		var id int
 		if err := rows.Scan(&id); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return err
 		}
 		teamIDs = append(teamIDs, id)
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return err
 	}
 	if err := rows.Close(); err != nil {
@@ -241,13 +241,13 @@ func GenerateScheduleContext(ctx context.Context, store DBTX) error {
 	for rows.Next() {
 		var id int
 		if err := rows.Scan(&id); err != nil {
-			rows.Close()
+			_ = rows.Close()
 			return fmt.Errorf("scan team id: %w", err)
 		}
 		teamIDs = append(teamIDs, id)
 	}
 	if err := rows.Err(); err != nil {
-		rows.Close()
+		_ = rows.Close()
 		return fmt.Errorf("iterate team ids: %w", err)
 	}
 	if err := rows.Close(); err != nil {

@@ -23,7 +23,11 @@ var migrateUpCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("❌ Failed to connect to database: %v", err)
 		}
-		defer db.Close()
+		defer func() {
+			if err := db.Close(); err != nil {
+				log.Printf("failed to close database: %v", err)
+			}
+		}()
 
 		log.Println("🔄 Running migrations...")
 

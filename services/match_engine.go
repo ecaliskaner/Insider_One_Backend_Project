@@ -14,11 +14,11 @@ type RNG interface {
 	Intn(n int) int
 }
 
-// defaultRNG wraps math/rand to implement the RNG interface
+// defaultRNG uses non-security randomness for match simulation variance.
 type defaultRNG struct{}
 
-func (d *defaultRNG) Float64() float64 { return rand.Float64() }
-func (d *defaultRNG) Intn(n int) int   { return rand.Intn(n) }
+func (d *defaultRNG) Float64() float64 { return rand.Float64() } // #nosec G404 -- sports simulation randomness, not security-sensitive.
+func (d *defaultRNG) Intn(n int) int   { return rand.Intn(n) }   // #nosec G404 -- sports simulation randomness, not security-sensitive.
 
 type lockedRNG struct {
 	mu  sync.Mutex
@@ -26,7 +26,7 @@ type lockedRNG struct {
 }
 
 func NewSeededRNG(seed int64) RNG {
-	return &lockedRNG{rng: rand.New(rand.NewSource(seed))}
+	return &lockedRNG{rng: rand.New(rand.NewSource(seed))} // #nosec G404 -- deterministic simulation seed for tests and benchmarks.
 }
 
 func (r *lockedRNG) Float64() float64 {

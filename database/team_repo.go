@@ -22,7 +22,9 @@ func (r *TeamRepo) GetAll(ctx context.Context) ([]models.Team, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var teams []models.Team
 	for rows.Next() {

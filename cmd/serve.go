@@ -34,7 +34,11 @@ var serveCmd = &cobra.Command{
 		if err != nil {
 			log.Fatalf("❌ Failed to initialize database: %v", err)
 		}
-		defer db.Close()
+		defer func() {
+			if err := db.Close(); err != nil {
+				log.Printf("failed to close database: %v", err)
+			}
+		}()
 
 		// Initialize services (Adapter pattern — external APIs injected)
 		matchEngine := services.NewMatchEngine()
@@ -79,8 +83,12 @@ var serveCmd = &cobra.Command{
 
 		// Configure HTTP Server
 		srv := &http.Server{
-			Addr:    ":" + port,
-			Handler: r,
+			Addr:              ":" + port,
+			Handler:           r,
+			ReadHeaderTimeout: 5 * time.Second,
+			ReadTimeout:       10 * time.Second,
+			WriteTimeout:      15 * time.Second,
+			IdleTimeout:       60 * time.Second,
 		}
 
 		// Channel to listen for OS signals

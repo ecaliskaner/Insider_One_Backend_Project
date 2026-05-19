@@ -193,7 +193,9 @@ func (w *OpenMeteoWeatherAdapter) fetchWeather(ctx context.Context, coords CityC
 	if err != nil {
 		return "", fmt.Errorf("call Open-Meteo: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() {
+		_ = resp.Body.Close()
+	}()
 
 	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
 		return "", fmt.Errorf("Open-Meteo returned status %d", resp.StatusCode)

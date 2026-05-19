@@ -116,7 +116,9 @@ func (r *MatchRepo) queryMatches(ctx context.Context, query string, args ...inte
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	var matches []models.Match
 	for rows.Next() {
