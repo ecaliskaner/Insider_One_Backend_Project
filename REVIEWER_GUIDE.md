@@ -83,11 +83,4 @@ go test ./services -bench=BenchmarkLeagueService_GetPredictions -benchmem -run '
 docker build -t insider-one-backend-project:review .
 ```
 
-## What To Look For
 
-- strict request validation and problem+json errors with stable `code` fields;
-- transactional mutations for edit, rollback, reset, and week simulation;
-- shared ranking logic for real standings and simulated standings;
-- prediction cache invalidation after every league mutation;
-- optional external adapters with timeout, cache, and fallback behavior;
-- health/readiness endpoints and request IDs for operational visibility.
