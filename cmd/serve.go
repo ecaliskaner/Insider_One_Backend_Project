@@ -10,10 +10,10 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/insider/league-simulation/database"
-	"github.com/insider/league-simulation/handlers"
-	"github.com/insider/league-simulation/router"
-	"github.com/insider/league-simulation/services"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/database"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/handlers"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/router"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/services"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -25,6 +25,9 @@ var serveCmd = &cobra.Command{
 		dbPath := viper.GetString("DB_PATH")
 		port := viper.GetString("PORT")
 		simSeed := viper.GetString("SIM_SEED")
+		weatherProvider := viper.GetString("WEATHER_PROVIDER")
+		strengthProviderName := viper.GetString("TEAM_STRENGTH_PROVIDER")
+		transfermarktBaseURL := viper.GetString("TRANSFERMARKT_API_BASE_URL")
 
 		// Initialize database (only connects and auto-migrates if enabled)
 		db, err := database.NewDB(dbPath)
@@ -45,13 +48,17 @@ var serveCmd = &cobra.Command{
 			weatherAdapter = services.NewWeatherAdapterWithSeed(seed + 1)
 			log.Printf("Using deterministic simulation seed: %d", seed)
 		}
-		leagueService := services.NewLeagueService(db, matchEngine, weatherAdapter)
+		weather := services.NewWeatherAdapterByProvider(weatherProvider, weatherAdapter)
+		log.Printf("Using weather provider: %s", weatherProvider)
+		strengthProvider := services.NewTeamStrengthProviderByProvider(strengthProviderName, transfermarktBaseURL)
+		log.Printf("Using team strength provider: %s", strengthProviderName)
+		leagueService := services.NewLeagueServiceWithStrengthProvider(db, matchEngine, weather, strengthProvider)
 
 		// Initialize handlers
 		leagueHandler := handlers.NewLeagueHandler(leagueService)
 
 		// Setup router
-		r := router.NewRouter(leagueHandler)
+		r := router.NewRouter(leagueHandler, db)
 
 		// Start server
 		log.Println("╔══════════════════════════════════════════════╗")
@@ -64,8 +71,8 @@ var serveCmd = &cobra.Command{
 		log.Println("  POST   /api/v1/league/next-week        — Simulate next week")
 		log.Println("  POST   /api/v1/league/play-all         — Play all remaining")
 		log.Println("  PUT    /api/v1/matches/{id}            — Edit match result")
-		log.Println("  GET    /api/v1/simulation/oracle       — Monte Carlo predictions")
-		log.Println("  POST   /api/v1/league/rollback/{week}  — Time Machine rollback")
+		log.Println("  GET    /api/v1/simulation/championship-probabilities — Championship probabilities")
+		log.Println("  POST   /api/v1/league/rollback/{week}  — Rollback league state")
 		log.Println("  GET    /api/v1/teams/{id}/metrics      — Team metrics")
 		log.Println("  POST   /api/v1/league/reset            — Reset league")
 		log.Println("")

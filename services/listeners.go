@@ -1,18 +1,27 @@
 package services
 
 import (
-	"log"
+	"log/slog"
 )
 
-// StartListeners initializes background workers to process events
-func StartListeners(eb *EventBus, s *LeagueServiceImpl) {
-	weekFinishedCh := eb.Subscribe("week_finished")
+// StartListeners initializes background workers for domain-event observability.
+func StartListeners(eb *EventBus) {
+	topics := []string{
+		EventWeekPlayed,
+		EventMatchEdited,
+		EventRollbackCompleted,
+		EventStandingsRebuilt,
+		EventPredictionCacheInvalidated,
+	}
 
-	go func() {
-		for event := range weekFinishedCh {
-			if week, ok := event.(int); ok {
-				log.Printf("Listener: Week %d officially finished. All state rebuilt deterministically.", week)
+	for _, topic := range topics {
+		events := eb.Subscribe(topic)
+		go func(topic string, events <-chan interface{}) {
+			for event := range events {
+				if domainEvent, ok := event.(DomainEvent); ok {
+					slog.Info("domain event", slog.String("topic", topic), slog.Any("fields", domainEvent.Fields))
+				}
 			}
-		}
-	}()
+		}(topic, events)
+	}
 }

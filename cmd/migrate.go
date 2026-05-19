@@ -3,7 +3,7 @@ package cmd
 import (
 	"log"
 
-	"github.com/insider/league-simulation/database"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/database"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )

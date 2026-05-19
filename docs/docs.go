@@ -15,6 +15,27 @@ const docTemplate = `{
     "host": "{{.Host}}",
     "basePath": "{{.BasePath}}",
     "paths": {
+        "/health": {
+            "get": {
+                "description": "Returns process liveness status.",
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "health"
+                ],
+                "summary": "Health check",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": true
+                        }
+                    }
+                }
+            }
+        },
         "/league/next-week": {
             "post": {
                 "description": "Simulates the next week's matches and updates state",
@@ -145,7 +166,7 @@ const docTemplate = `{
                 "tags": [
                     "league"
                 ],
-                "summary": "Time Machine rollback",
+                "summary": "Rollback league state",
                 "parameters": [
                     {
                         "type": "integer",
@@ -299,7 +320,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/simulation/oracle": {
+        "/simulation/championship-probabilities": {
             "get": {
                 "description": "Runs 1,000 Monte Carlo simulations to calculate Championship Win %",
                 "produces": [
@@ -308,7 +329,7 @@ const docTemplate = `{
                 "tags": [
                     "simulation"
                 ],
-                "summary": "Monte Carlo predictions",
+                "summary": "Championship probabilities",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -391,6 +412,10 @@ const docTemplate = `{
         "handlers.ProblemDetails": {
             "type": "object",
             "properties": {
+                "code": {
+                    "description": "Stable machine-readable error code",
+                    "type": "string"
+                },
                 "detail": {
                     "description": "Human-readable explanation specific to this occurrence",
                     "type": "string"

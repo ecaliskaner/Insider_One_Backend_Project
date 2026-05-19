@@ -10,6 +10,8 @@ This document describes the reviewer-facing test coverage for the Insider Footba
 | Database | SQLite |
 | Local base URL | `http://localhost:8080` |
 | Deterministic seed | `SIM_SEED=42` |
+| Weather provider | `WEATHER_PROVIDER=local` |
+| Team strength provider | `TEAM_STRENGTH_PROVIDER=local` |
 | Test database | Temporary SQLite file |
 
 ## Verification Commands
@@ -19,6 +21,7 @@ gofmt -l .
 go test ./...
 go vet ./...
 go build ./...
+docker build -t insider-one-backend-project:review .
 ```
 
 Manual API verification can be run against a local server:
@@ -41,8 +44,8 @@ DB_PATH=<temp-db> SIM_SEED=42 go run . serve
 | TC-006 | Reject play after season completion | seventh call to `POST /api/v1/league/next-week` | `400 Bad Request`; title is `Season Overrun Prevented` | Season boundary |
 | TC-007 | Play all remaining weeks | `POST /api/v1/league/play-all` | `200 OK`; all remaining matches are grouped by week | Extra requirement |
 | TC-008 | Reject play all after completion | repeat `POST /api/v1/league/play-all` after completed season | `400 Bad Request`; detail says all weeks have already been played | Edge case |
-| TC-009 | Oracle before allowed week | `GET /api/v1/simulation/oracle` before week 5 | `400 Bad Request`; title is `Premature Oracle Request` | Prediction gating |
-| TC-010 | Oracle after week 4 | `GET /api/v1/simulation/oracle` after four weeks have been played | `200 OK`; returns four championship probabilities | Prediction requirement |
+| TC-009 | Championship probabilities before allowed week | `GET /api/v1/simulation/championship-probabilities` before week 5 | `400 Bad Request`; title is `Premature Championship Probability Request` | Prediction gating |
+| TC-010 | Championship probabilities after week 4 | `GET /api/v1/simulation/championship-probabilities` after four weeks have been played | `200 OK`; returns four championship probabilities | Prediction requirement |
 | TC-011 | Overview after week 4 | `GET /api/v1/league/overview` after four weeks have been played | `200 OK`; includes `predictions` with four entries | Case screen with estimation |
 | TC-012 | Get match details | `GET /api/v1/matches/1` | `200 OK`; returns match and event list | Match status visibility |
 | TC-013 | Edit match result | `PUT /api/v1/matches/1` with both scores | `200 OK`; match status is edited and standings rebuild | Extra requirement |
@@ -57,6 +60,21 @@ DB_PATH=<temp-db> SIM_SEED=42 go run . serve
 | TC-022 | Swagger UI | `GET /swagger/index.html` | `200 OK`; API docs are available | Documentation |
 | TC-023 | Per-client rate limiter | exhaust one client bucket, then request from another client | first client receives `429`; second client still succeeds | Middleware isolation |
 | TC-024 | Seeded simulation | run same simulation with same `SIM_SEED` | match engine and weather choices are repeatable | Demo reproducibility |
+| TC-024A | Open-Meteo adapter success | fake Open-Meteo server returns current weather | weather code is normalized and cached | External adapter |
+| TC-024B | Open-Meteo adapter failure | fake Open-Meteo server returns an error | local fallback weather is used | External resilience |
+| TC-024C | Market-value strength provider | local provider derives team strength from market value | deterministic strength is returned | Strength provider |
+| TC-024D | Transfermarkt strength provider success | fake Transfermarkt-compatible server returns market value | strength is normalized and cached | External adapter |
+| TC-024E | Transfermarkt strength provider failure | fake provider returns an error | local seeded strength is used | External resilience |
+| TC-025 | Liveness probe | `GET /healthz` | `200 OK`; returns `status: ok` | Platform health |
+| TC-026 | API-scoped health probe | `GET /api/v1/health` | `200 OK`; returns `status: ok` | API health |
+| TC-027 | Readiness probe | `GET /readyz` | `200 OK` when database ping succeeds; `503` if storage is unavailable | Platform readiness |
+| TC-028 | Preserve request ID | request with `X-Request-ID` | Response includes the same `X-Request-ID` value | Trace correlation |
+| TC-029 | Generate request ID | request without `X-Request-ID` | Response includes a generated `X-Request-ID` value | Trace correlation |
+| TC-030 | Malformed JSON edit body | `PUT /api/v1/matches/1` with invalid JSON | `400 Bad Request`; problem response explains malformed JSON | Request validation |
+| TC-031 | Wrong edit content type | `PUT /api/v1/matches/1` with `text/plain` | `400 Bad Request`; content type is rejected | Request validation |
+| TC-032 | Edit scheduled match | `PUT /api/v1/matches/1` before it has been played | `400 Bad Request`; only played matches can be edited | Domain validation |
+| TC-033 | Duplicate rollback | repeat `POST /api/v1/league/rollback/2` | `200 OK`; rollback is idempotent and standings remain consistent | Rebuild consistency |
+| TC-034 | Invalid team ID format | `GET /api/v1/teams/not-a-number/metrics` | `400 Bad Request`; team ID must be numeric | Request validation |
 
 ## Edge Cases Covered By Automated Tests
 
@@ -68,12 +86,23 @@ DB_PATH=<temp-db> SIM_SEED=42 go run . serve
 | Missing edit score is rejected | `TestEditMatch_RequiresBothScores` |
 | Unknown edit field is rejected | `TestEditMatch_RejectsUnknownFields` |
 | Negative edit score is rejected | `TestEditMatch_RejectsNegativeScores` |
-| Premature oracle request is rejected | `TestOracle_RejectsPrematureRequest` |
+| Malformed JSON edit body is rejected | `TestEditMatch_RejectsMalformedJSON` |
+| Wrong edit content type is rejected | `TestEditMatch_RejectsWrongContentType` |
+| Scheduled match edit is rejected | `TestEditMatch_RejectsScheduledMatch` |
+| Premature championship probability request is rejected | `TestChampionshipProbabilities_RejectPrematureRequest` |
 | Out-of-range rollback is rejected | `TestRollback_RejectsOutOfRangeWeek` |
+| Duplicate rollback is idempotent and preserves standings rebuild consistency | `TestRollback_IsIdempotentAndPreservesRebuildConsistency` |
 | Completed season rejects another play-all | `TestPlayAll_RejectsCompletedSeason` |
 | Missing match returns 404 | `TestGetMatch_ReturnsNotFoundForMissingMatch` |
+| Invalid team ID format is rejected | `TestTeamMetrics_RejectsInvalidTeamID` |
 | Per-client rate limiting does not block other clients | `TestRateLimiterMiddleware_IsPerClient` |
+| Health, API health, and readiness probes return success when dependencies are available | `TestHealthAndReadinessEndpoints` |
+| Readiness returns 503 when the database is unavailable | `TestReadyz_ReturnsUnavailableWithoutDatabase` |
+| Incoming request IDs are preserved | `TestRequestIDHeader_IsReturned`, `TestRequestIDMiddleware_PreservesInboundID` |
+| Missing request IDs are generated | `TestRequestIDMiddleware_GeneratesMissingID` |
 | Seeded simulation is deterministic | `TestSeededMatchEngine_IsDeterministic`, `TestSeededWeatherAdapter_IsDeterministic` |
+| Open-Meteo weather is mapped, cached, and resilient | `TestOpenMeteoWeatherAdapter_MapsCurrentWeather`, `TestOpenMeteoWeatherAdapter_FallsBackOnProviderError`, `TestMapOpenMeteoCondition` |
+| Team strength providers are deterministic, cached, and resilient | `TestMarketValueTeamStrengthProvider_CalculatesDeterministicStrength`, `TestTransfermarktTeamStrengthProvider_UsesExternalMarketValueAndCaches`, `TestTransfermarktTeamStrengthProvider_FallsBackOnProviderError` |
 
 ## Latest Local Verification Result
 
@@ -94,9 +123,9 @@ Live API smoke test against a temporary SQLite database and `SIM_SEED=42`:
 TC-001 reset                         PASS
 TC-002 standings                     PASS
 TC-003 overview before predictions   PASS
-TC-009 premature oracle              PASS
+TC-009 premature championship probabilities              PASS
 TC-004 play weeks 1-4                PASS
-TC-010 oracle after week 4           PASS
+TC-010 championship probabilities after week 4           PASS
 TC-011 overview with predictions     PASS
 TC-014 missing score                 PASS
 TC-015 unknown field                 PASS

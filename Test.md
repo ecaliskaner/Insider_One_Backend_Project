@@ -47,19 +47,19 @@ curl -X POST http://localhost:8080/api/v1/league/play-all
 Validation Criteria: Simulates all remaining weeks up to Week 6. Returns a nested JSON structure of all matches grouped by week.
 
 📍 Phase 2: Advanced State Management & Caching
-Test 2.1: The "Oracle" Caching System
-The Oracle requires Week 4 to be completed and utilizes an in-memory cache to prevent CPU spikes.
+Test 2.1: Championship Probability Caching
+Championship probabilities require Week 4 to be completed and utilizes an in-memory cache to prevent CPU spikes.
 
-Trigger Oracle (Cache Miss - Cold Start):
+Trigger championship probabilities (Cache Miss - Cold Start):
 
 Bash
-time curl -s http://localhost:8080/api/v1/simulation/oracle
+time curl -s http://localhost:8080/api/v1/simulation/championship-probabilities
 Validation Criteria: Takes slightly longer (e.g., 50-200ms) as goroutines run 1,000 simulations. Returns probability percentages that sum to ~100%.
 
-Trigger Oracle Again (Cache Hit):
+Trigger championship probabilities Again (Cache Hit):
 
 Bash
-time curl -s http://localhost:8080/api/v1/simulation/oracle
+time curl -s http://localhost:8080/api/v1/simulation/championship-probabilities
 Validation Criteria: Near 0ms execution time. The JSON payload must match the previous call exactly.
 
 Test 2.2: Event-Driven Recalculation (Match Editing)
@@ -75,9 +75,9 @@ Verify State Mutation:
 
 Table Check: curl -s http://localhost:8080/api/v1/league/table -> The home team's gd must immediately reflect the massive +10 shift.
 
-Cache Invalidation: Call the Oracle again. It must take slightly longer (Cache Miss) and return entirely new percentages, as the baseline state has changed.
+Cache Invalidation: Call championship probabilities again. It must take slightly longer (Cache Miss) and return entirely new percentages, as the baseline state has changed.
 
-Test 2.3: Time Machine (Transactional Rollback)
+Test 2.3: Transactional Rollback
 Rollback to Week 3:
 
 Bash
@@ -100,12 +100,12 @@ Bash
 for i in {1..5}; do curl -s -o /dev/null -w "%{http_code}\n" -X POST http://localhost:8080/api/v1/league/next-week & done
 Validation Criteria: Exactly one request should successfully simulate Week 1 (returning 200 OK). The others must either queue safely for subsequent weeks (Weeks 2, 3, 4, 5) OR return a safe 400 Bad Request depending on the locking strategy. The database must not contain duplicate Week 1 matches.
 
-Test 3.2: Premature Oracle Call
+Test 3.2: Premature Championship Probability Request
 Reset the league: curl -X POST http://localhost:8080/api/v1/league/reset
 
-Call Oracle: curl -s http://localhost:8080/api/v1/simulation/oracle
+Call championship probabilities: curl -s http://localhost:8080/api/v1/simulation/championship-probabilities
 
-Validation Criteria: Returns 400 Bad Request - Oracle predictions are only available after Week 4.
+Validation Criteria: Returns 400 Bad Request - Championship probabilities are only available after Week 4.
 
 Test 3.3: Invalid Rollback Bound
 Attempt out-of-bounds rollback: curl -X POST http://localhost:8080/api/v1/league/rollback/99
@@ -127,12 +127,12 @@ Verify that the server does not instantly kill active database transactions when
 
 Start the server locally (go run main.go).
 
-Trigger the Oracle endpoint (curl http://localhost:8080/api/v1/simulation/oracle).
+Trigger the championship probabilities endpoint (curl http://localhost:8080/api/v1/simulation/championship-probabilities).
 
 Immediately hit Ctrl+C in the terminal running the server.
 
 Validation Criteria: 1. Terminal logs Received SIGINT, shutting down gracefully...
-2. The curl command to the Oracle must successfully complete and return the JSON payload.
+2. The curl command to championship probabilities must successfully complete and return the JSON payload.
 3. Only after the response is sent, the terminal logs Database connection closed. Server stopped.
 
 🤖 Appendix: Automated Unit Testing (AI Prompt)
@@ -156,7 +156,7 @@ Write table-driven tests for the following scenarios:
 
 TestCalculateStandings_Sorting: Manually mock a scenario where 3 teams have equal points. Mock the StandingRepository to return Team A (GD +5, GF 10), Team B (GD +5, GF 12), and Team C (GD +2, GF 15). Assert that the service sorts them correctly based on Premier League rules (Points -> GD -> GF). Therefore, Team B should be 1st, Team A 2nd, Team C 3rd.
 
-TestOracle_CacheHit: Mock the MatchRepository to return a state where 4 weeks are played. Call service.GetOraclePredictions(). Assert that the MatchEngine.SimulateRemaining() is called exactly 1,000 times. Call it a second time and assert that MatchEngine.SimulateRemaining() is called 0 times (verifying the sync.RWMutex cache hit).
+TestChampionshipProbabilities_CacheHit: Mock the MatchRepository to return a state where 4 weeks are played. Call service.GetPredictions(). Assert that the MatchEngine.SimulateRemaining() is called exactly 1,000 times. Call it a second time and assert that MatchEngine.SimulateRemaining() is called 0 times (verifying the sync.RWMutex cache hit).
 
 TestRollback_Transaction: Mock the MatchRepository.RollbackToWeek(3) to succeed. Assert that the service automatically triggers a cache invalidation and publishes a RecalculateStandings event to the EventBus.
 

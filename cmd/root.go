@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 
+	"github.com/ecaliskaner/Insider_One_Backend_Project/services"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 )
@@ -11,7 +12,7 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "insider",
 	Short: "Insider Football League Simulation API",
-	Long:  `A sophisticated REST API that simulates a football league using a Poisson-based match engine, Monte Carlo predictions, and a Time Machine rollback feature.`,
+	Long:  `A REST API that simulates a football league using a Poisson-based match engine, Monte Carlo championship probabilities, and rollback support.`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -34,4 +35,7 @@ func initConfig() {
 	viper.SetDefault("PORT", "8080")
 	viper.SetDefault("DB_PATH", "./league.db")
 	viper.SetDefault("SIM_SEED", "")
+	viper.SetDefault("WEATHER_PROVIDER", services.WeatherProviderLocal)
+	viper.SetDefault("TEAM_STRENGTH_PROVIDER", services.TeamStrengthProviderLocal)
+	viper.SetDefault("TRANSFERMARKT_API_BASE_URL", "")
 }

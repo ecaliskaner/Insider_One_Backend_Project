@@ -1,8 +1,8 @@
 package main
 
 import (
-	"github.com/insider/league-simulation/cmd"
-	_ "github.com/insider/league-simulation/docs"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/cmd"
+	_ "github.com/ecaliskaner/Insider_One_Backend_Project/docs"
 )
 
 // @title           Football League Simulation API

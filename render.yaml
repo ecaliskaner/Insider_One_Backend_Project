@@ -13,6 +13,10 @@ services:
         value: /data/league.db
       - key: SIM_SEED
         value: 42
+      - key: WEATHER_PROVIDER
+        value: local
+      - key: TEAM_STRENGTH_PROVIDER
+        value: local
     disk:
       name: sqlite-data
       mountPath: /data

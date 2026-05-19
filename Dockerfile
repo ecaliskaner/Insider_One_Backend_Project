@@ -1,4 +1,4 @@
-FROM golang:1.26.3-alpine AS builder
+FROM golang:1.26.3-alpine3.22 AS builder
 
 # Install GCC and musl-dev for SQLite CGO compilation
 RUN apk add --no-cache gcc musl-dev
@@ -18,7 +18,7 @@ COPY . .
 RUN CGO_ENABLED=1 GOOS=linux go build -o main .
 
 # Run stage
-FROM alpine:latest  
+FROM alpine:3.22
 
 # Install tzdata and ca-certificates
 RUN apk --no-cache add ca-certificates tzdata

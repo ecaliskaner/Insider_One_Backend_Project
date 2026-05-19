@@ -1,4 +1,4 @@
-module github.com/insider/league-simulation
+module github.com/ecaliskaner/Insider_One_Backend_Project
 
 go 1.26.3
 

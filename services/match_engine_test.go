@@ -3,7 +3,7 @@ package services
 import (
 	"testing"
 
-	"github.com/insider/league-simulation/models"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/models"
 	"github.com/stretchr/testify/assert"
 )
 

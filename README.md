@@ -30,6 +30,7 @@ A Go REST API that simulates a four-team football league. It supports week-by-we
 |-- Dockerfile
 |-- docker-compose.yml
 |-- Makefile
+|-- openapi.yaml             # Importable OpenAPI spec for quick reviewer testing
 |-- go.mod
 `-- main.go
 ```
@@ -74,14 +75,14 @@ Docker Compose sets `SIM_SEED=42` so local demos are repeatable.
 
 ## Deployment
 
-The repository includes a Render blueprint in `render.yaml`. After connecting the repository to Render, create the service from the blueprint and use the deployed service URL as your live API base URL.
+The repository includes a Render blueprint in `render.yaml`. The current deployed service is:
 
 ```text
-Live API: https://<your-render-service>.onrender.com
-Swagger: https://<your-render-service>.onrender.com/swagger/index.html
+Live API: https://insider-one-backend-project.onrender.com
+Swagger: https://insider-one-backend-project.onrender.com/swagger/index.html
 ```
 
-The Postman collection uses a `base_url` variable, so it can target either `http://localhost:8080` or the deployed URL.
+The Postman collection uses a `base_url` variable. It defaults to the deployed Render URL and can be switched to `http://localhost:8080` for local review.
 
 ## Environment Variables
 
@@ -90,6 +91,33 @@ The Postman collection uses a `base_url` variable, so it can target either `http
 | `PORT` | `8080` | HTTP server port |
 | `DB_PATH` | `./league.db` | SQLite database file path |
 | `SIM_SEED` | empty | Optional integer seed for repeatable weather and match simulation |
+| `WEATHER_PROVIDER` | `local` | Weather source: `local` or `open-meteo` |
+| `TEAM_STRENGTH_PROVIDER` | `local` | Team strength source: `local`, `market-value`, or `transfermarkt` |
+| `TRANSFERMARKT_API_BASE_URL` | empty | Base URL for an optional self-hosted Transfermarkt-compatible API |
+
+Copy `.env.example` when you want a local template for environment configuration.
+
+`WEATHER_PROVIDER=open-meteo` enables live weather from Open-Meteo for known team cities. The adapter uses a short timeout, in-memory cache, and local fallback so simulations continue if the external API is unavailable.
+
+`TEAM_STRENGTH_PROVIDER=transfermarkt` is optional and expects a self-hosted Transfermarkt-compatible API. It uses short HTTP timeouts, caching, and local fallback. `TEAM_STRENGTH_PROVIDER=market-value` is fully local and derives base strength from seeded market values.
+
+## Architecture Flow
+
+```mermaid
+flowchart LR
+    A["HTTP request"] --> B["Router and middleware"]
+    B --> C["Request validation"]
+    C --> D["Handler"]
+    D --> E["Service lock"]
+    E --> F["SQL transaction"]
+    F --> G["Repositories"]
+    G --> H["Rebuild standings and team metrics"]
+    H --> I["Invalidate prediction cache"]
+    I --> J["Publish domain event"]
+    J --> K["JSON or problem+json response"]
+```
+
+Mutating endpoints follow this flow so edits, rollback, reset, and simulations do not leave partial state behind. Read endpoints use the same repository and ranking functions, while championship probabilities reuse the shared ranking logic inside the Monte Carlo loop. The internal event bus emits operational domain events such as `week_played`, `match_edited`, `rollback_completed`, `standings_rebuilt`, and `prediction_cache_invalidated`.
 
 ## Make Targets
 
@@ -97,6 +125,7 @@ The Postman collection uses a `base_url` variable, so it can target either `http
 make build       # Build the binary
 make run         # Build, migrate, seed, and serve
 make test        # Run the full test suite
+make bench       # Benchmark championship probability generation and cache reads
 make swagger     # Regenerate Swagger artifacts
 make docker-run  # Start with Docker Compose
 make clean       # Remove local build/database files
@@ -107,15 +136,20 @@ make clean       # Remove local build/database files
 | Method | Endpoint | Description |
 | --- | --- | --- |
 | `GET` | `/api/v1/league/table` | Current standings |
+| `GET` | `/healthz` | Root liveness probe for platform health checks |
+| `GET` | `/readyz` | Root readiness probe that verifies database connectivity |
+| `GET` | `/api/v1/health` | API-scoped liveness probe |
 | `GET` | `/api/v1/league/overview` | Current standings, weekly match status, and predictions when available |
 | `POST` | `/api/v1/league/next-week` | Simulate the next scheduled week |
 | `POST` | `/api/v1/league/play-all` | Simulate all remaining weeks |
 | `GET` | `/api/v1/matches/{id}` | Get a match and its events |
 | `PUT` | `/api/v1/matches/{id}` | Edit a match score and rebuild league state |
-| `GET` | `/api/v1/simulation/oracle` | Run championship probability simulations |
+| `GET` | `/api/v1/simulation/championship-probabilities` | Run championship probability simulations |
 | `POST` | `/api/v1/league/rollback/{week}` | Reset matches from the target week onward |
 | `GET` | `/api/v1/teams/{id}/metrics` | Get strength, morale, fatigue, and market value |
 | `POST` | `/api/v1/league/reset` | Recreate teams, players, standings, and schedule |
+
+The importable OpenAPI spec is also available at `openapi.yaml` in the repository root.
 
 ## Domain Rules
 
@@ -123,9 +157,11 @@ make clean       # Remove local build/database files
 - A win is worth 3 points, a draw 1 point, and a loss 0 points.
 - Standings are ordered by points, goal difference, goals for, then tied-team head-to-head rules where available.
 - Match simulation uses team strength, morale, fatigue, weather, and home advantage.
+- Weather can come from the local deterministic adapter or Open-Meteo via the `WEATHER_PROVIDER` setting.
+- Team base strength can come from seeded values, local market-value derivation, or an optional Transfermarkt-compatible provider.
 - Editing a match result triggers a full state rebuild.
 - Rollback resets matches and events from the target week onward, then rebuilds standings and team metrics.
-- Oracle predictions are available after enough weeks have been played and are cached until league state changes.
+- Championship probabilities are available after enough weeks have been played and are cached until league state changes.
 
 ## Data Model
 
@@ -143,11 +179,21 @@ Migrations live in `database/migrations`.
 
 Detailed schema notes and key repository queries are documented in `docs/sql.md`.
 
+Championship probability logic is documented in `docs/simulation.md`.
+
 ## Consistency And Error Handling
 
 The service serializes league state mutations with an application-level lock. Multi-table write operations such as playing a week, editing a result, rollback, and reset are wrapped in SQL transactions so partial state is not committed if a step fails.
 
 Repository methods use `context.Context`, and database scan/write errors are returned to callers instead of being silently ignored.
+
+Routed HTTP responses include an `X-Request-ID` header. Incoming request IDs are preserved for trace correlation, and missing IDs are generated by middleware and included in structured request logs. Request logs include both `duration` and numeric `duration_ms` fields.
+
+Request validation is centralized in handler helpers for strict JSON decoding, content type checks, path ID parsing, rollback bounds, and score sanity before service mutations run.
+
+Problem responses include stable machine-readable `code` values such as `INVALID_ID`, `INVALID_BODY`, and `ROLLBACK_FAILED`.
+
+Rollback responses include a summary with the target week, reset match count, reset weeks, standings recalculation status, team-metric rebuild status, and prediction-cache invalidation status.
 
 ## Testing
 
@@ -157,6 +203,7 @@ Run:
 go test ./...
 go vet ./...
 go build ./...
+make bench
 ```
 
 The test suite includes:
@@ -164,6 +211,9 @@ The test suite includes:
 - unit tests for the match engine and league service behavior;
 - HTTP integration tests for the main league lifecycle;
 - a regression test proving week 6 can be simulated and week 7 is rejected.
+- negative-path tests for malformed JSON, invalid IDs, invalid edits, duplicate rollback, and rebuild consistency.
+- Championship probability benchmarks covering fresh prediction generation and cached reads.
+- health/readiness probes and request ID middleware behavior.
 
 ## Example Requests
 
@@ -176,7 +226,7 @@ curl -X POST http://localhost:8080/api/v1/league/next-week
 
 curl -X POST http://localhost:8080/api/v1/league/play-all
 
-curl http://localhost:8080/api/v1/simulation/oracle
+curl http://localhost:8080/api/v1/simulation/championship-probabilities
 
 curl -X PUT http://localhost:8080/api/v1/matches/1 \
   -H "Content-Type: application/json" \

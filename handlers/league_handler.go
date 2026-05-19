@@ -3,13 +3,10 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"io"
 	"log/slog"
 	"net/http"
-	"strconv"
 
-	"github.com/gorilla/mux"
-	"github.com/insider/league-simulation/services"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/services"
 )
 
 // LeagueHandler handles HTTP requests for the league API
@@ -171,10 +168,9 @@ func (h *LeagueHandler) PlayAll(w http.ResponseWriter, r *http.Request) {
 // @Failure      404  {object}  ProblemDetails
 // @Router       /matches/{id} [get]
 func (h *LeagueHandler) GetMatch(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	matchID, err := strconv.Atoi(vars["id"])
+	matchID, err := parsePathInt(r, "id", "Match ID")
 	if err != nil {
-		WriteProblem(w, r, http.StatusBadRequest, "Invalid Match ID", "Match ID must be an integer.", "https://api.insiderfootball.com/errors/invalid-id")
+		WriteProblem(w, r, http.StatusBadRequest, "Invalid Match ID", err.Error()+".", "https://api.insiderfootball.com/errors/invalid-id")
 		return
 	}
 
@@ -203,26 +199,19 @@ func (h *LeagueHandler) GetMatch(w http.ResponseWriter, r *http.Request) {
 // @Failure      500  {object}  ProblemDetails
 // @Router       /matches/{id} [put]
 func (h *LeagueHandler) EditMatch(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	matchID, err := strconv.Atoi(vars["id"])
+	matchID, err := parsePathInt(r, "id", "Match ID")
 	if err != nil {
-		WriteProblem(w, r, http.StatusBadRequest, "Invalid Match ID", "Match ID must be an integer.", "https://api.insiderfootball.com/errors/invalid-id")
+		WriteProblem(w, r, http.StatusBadRequest, "Invalid Match ID", err.Error()+".", "https://api.insiderfootball.com/errors/invalid-id")
 		return
 	}
 
 	var req EditMatchRequest
-	decoder := json.NewDecoder(r.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&req); err != nil {
-		WriteProblem(w, r, http.StatusBadRequest, "Invalid Request Body", "Expected JSON with home_score and away_score.", "https://api.insiderfootball.com/errors/invalid-body")
+	if err := decodeStrictJSON(w, r, &req); err != nil {
+		WriteProblem(w, r, http.StatusBadRequest, "Invalid Request Body", err.Error()+".", "https://api.insiderfootball.com/errors/invalid-body")
 		return
 	}
-	if err := decoder.Decode(&struct{}{}); err != io.EOF {
-		WriteProblem(w, r, http.StatusBadRequest, "Invalid Request Body", "Request body must contain a single JSON object.", "https://api.insiderfootball.com/errors/invalid-body")
-		return
-	}
-	if req.HomeScore == nil || req.AwayScore == nil {
-		WriteProblem(w, r, http.StatusBadRequest, "Invalid Request Body", "Both home_score and away_score are required.", "https://api.insiderfootball.com/errors/invalid-body")
+	if err := validateEditMatchRequest(req); err != nil {
+		WriteProblem(w, r, http.StatusBadRequest, "Invalid Request Body", err.Error()+".", "https://api.insiderfootball.com/errors/invalid-body")
 		return
 	}
 
@@ -243,16 +232,16 @@ func (h *LeagueHandler) EditMatch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetOracle godoc
-// @Summary      Monte Carlo predictions
+// GetChampionshipProbabilities godoc
+// @Summary      Championship probabilities
 // @Description  Runs 1,000 Monte Carlo simulations to calculate Championship Win %
 // @Tags         simulation
 // @Produce      json
 // @Success      200  {object}  map[string]interface{}
 // @Failure      400  {object}  ProblemDetails
 // @Failure      500  {object}  ProblemDetails
-// @Router       /simulation/oracle [get]
-func (h *LeagueHandler) GetOracle(w http.ResponseWriter, r *http.Request) {
+// @Router       /simulation/championship-probabilities [get]
+func (h *LeagueHandler) GetChampionshipProbabilities(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	currentWeek, err := h.service.GetCurrentWeek(ctx)
 	if err != nil {
@@ -262,16 +251,16 @@ func (h *LeagueHandler) GetOracle(w http.ResponseWriter, r *http.Request) {
 
 	if currentWeek <= 4 {
 		WriteProblem(w, r, http.StatusBadRequest,
-			"Premature Oracle Request",
+			"Premature Championship Probability Request",
 			"Championship win probabilities are mathematically volatile and unavailable until Week 4 data constraints are met.",
-			"https://api.insiderfootball.com/errors/premature-oracle",
+			"https://api.insiderfootball.com/errors/premature-championship-probabilities",
 		)
 		return
 	}
 
 	predictions, err := h.service.GetPredictions(ctx)
 	if err != nil {
-		WriteProblem(w, r, http.StatusBadRequest, "Oracle Error", err.Error(), "https://api.insiderfootball.com/errors/oracle-failed")
+		WriteProblem(w, r, http.StatusBadRequest, "Championship Probability Error", err.Error(), "https://api.insiderfootball.com/errors/championship-probabilities-failed")
 		return
 	}
 	standings, err := h.service.GetStandings(r.Context())
@@ -286,7 +275,7 @@ func (h *LeagueHandler) GetOracle(w http.ResponseWriter, r *http.Request) {
 }
 
 // Rollback godoc
-// @Summary      Time Machine rollback
+// @Summary      Rollback league state
 // @Description  Reverts database state to a specific week
 // @Tags         league
 // @Produce      json
@@ -296,18 +285,18 @@ func (h *LeagueHandler) GetOracle(w http.ResponseWriter, r *http.Request) {
 // @Failure      500  {object}  ProblemDetails
 // @Router       /league/rollback/{week} [post]
 func (h *LeagueHandler) Rollback(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	targetWeek, err := strconv.Atoi(vars["week"])
-	if err != nil || targetWeek < 0 || targetWeek > 6 {
+	targetWeek, err := parseBoundedPathInt(r, "week", "Target week", 0, 6)
+	if err != nil {
 		WriteProblem(w, r, http.StatusBadRequest,
 			"Invalid Rollback Target Bounds",
-			"Target week must be a valid integer bounded strictly within season parameters (Weeks 0 through 6).",
+			err.Error()+".",
 			"https://api.insiderfootball.com/errors/invalid-rollback-bounds",
 		)
 		return
 	}
 
-	if err := h.service.Rollback(r.Context(), targetWeek); err != nil {
+	summary, err := h.service.Rollback(r.Context(), targetWeek)
+	if err != nil {
 		WriteProblem(w, r, http.StatusBadRequest, "Rollback Failed", err.Error(), "https://api.insiderfootball.com/errors/rollback-failed")
 		return
 	}
@@ -323,7 +312,8 @@ func (h *LeagueHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	respondJSON(w, http.StatusOK, nil, map[string]interface{}{
-		"message":      fmt.Sprintf("Time machine: reverted to week %d", targetWeek),
+		"message":      fmt.Sprintf("Rollback completed to week %d", targetWeek),
+		"summary":      summary,
 		"current_week": currentWeek,
 		"standings":    standings,
 	})
@@ -340,10 +330,9 @@ func (h *LeagueHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 // @Failure      404  {object}  ProblemDetails
 // @Router       /teams/{id}/metrics [get]
 func (h *LeagueHandler) GetTeamMetrics(w http.ResponseWriter, r *http.Request) {
-	vars := mux.Vars(r)
-	teamID, err := strconv.Atoi(vars["id"])
+	teamID, err := parsePathInt(r, "id", "Team ID")
 	if err != nil {
-		WriteProblem(w, r, http.StatusBadRequest, "Invalid Team ID", "Team ID must be an integer.", "https://api.insiderfootball.com/errors/invalid-id")
+		WriteProblem(w, r, http.StatusBadRequest, "Invalid Team ID", err.Error()+".", "https://api.insiderfootball.com/errors/invalid-id")
 		return
 	}
 

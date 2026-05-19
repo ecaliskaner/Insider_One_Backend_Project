@@ -8,8 +8,8 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/insider/league-simulation/database"
-	"github.com/insider/league-simulation/models"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/database"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/models"
 )
 
 const totalWeeks = 6
@@ -24,17 +24,25 @@ type LeagueServiceImpl struct {
 	standingRepo models.StandingRepository
 	engine       MatchEngine
 	weather      WeatherAdapter
+	strength     TeamStrengthProvider
 	db           *database.DB
 
 	// Advanced Architecture Features
-	eventBus    *EventBus
-	cacheMu     sync.RWMutex
-	oracleCache []models.Prediction
-	stateMu     sync.RWMutex
+	eventBus        *EventBus
+	cacheMu         sync.RWMutex
+	predictionCache []models.Prediction
+	stateMu         sync.RWMutex
 }
 
 // NewLeagueService creates a new LeagueServiceImpl with dependency injection
 func NewLeagueService(db *database.DB, engine MatchEngine, weather WeatherAdapter) *LeagueServiceImpl {
+	return NewLeagueServiceWithStrengthProvider(db, engine, weather, NewLocalTeamStrengthProvider())
+}
+
+func NewLeagueServiceWithStrengthProvider(db *database.DB, engine MatchEngine, weather WeatherAdapter, strength TeamStrengthProvider) *LeagueServiceImpl {
+	if strength == nil {
+		strength = NewLocalTeamStrengthProvider()
+	}
 	eb := NewEventBus()
 	svc := &LeagueServiceImpl{
 		teamRepo:     database.NewTeamRepo(db.Conn),
@@ -44,18 +52,33 @@ func NewLeagueService(db *database.DB, engine MatchEngine, weather WeatherAdapte
 		standingRepo: database.NewStandingRepo(db.Conn),
 		engine:       engine,
 		weather:      weather,
+		strength:     strength,
 		db:           db,
 		eventBus:     eb,
 	}
 
-	StartListeners(eb, svc)
+	StartListeners(eb)
 	return svc
 }
 
 func (s *LeagueServiceImpl) invalidateCache() {
 	s.cacheMu.Lock()
-	s.oracleCache = nil
+	s.predictionCache = nil
 	s.cacheMu.Unlock()
+}
+
+func (s *LeagueServiceImpl) invalidatePredictionCache(reason string) {
+	s.invalidateCache()
+	s.publishEvent(EventPredictionCacheInvalidated, map[string]interface{}{
+		"reason": reason,
+	})
+}
+
+func (s *LeagueServiceImpl) publishEvent(topic string, fields map[string]interface{}) {
+	if s.eventBus == nil {
+		return
+	}
+	s.eventBus.Publish(topic, DomainEvent{Name: topic, Fields: fields})
 }
 
 func (s *LeagueServiceImpl) runInTx(ctx context.Context, fn func(*LeagueServiceImpl, database.DBTX) error) error {
@@ -72,6 +95,7 @@ func (s *LeagueServiceImpl) runInTx(ctx context.Context, fn func(*LeagueServiceI
 		standingRepo: database.NewStandingRepo(tx),
 		engine:       s.engine,
 		weather:      s.weather,
+		strength:     s.strength,
 		db:           s.db,
 		eventBus:     s.eventBus,
 	}
@@ -140,6 +164,10 @@ func (s *LeagueServiceImpl) PlayNextWeek(ctx context.Context) (*models.WeekResul
 }
 
 func (s *LeagueServiceImpl) playNextWeekLocked(ctx context.Context) (*models.WeekResult, error) {
+	if err := s.refreshTeamStrengths(ctx, nil); err != nil {
+		return nil, fmt.Errorf("refresh team strengths: %w", err)
+	}
+
 	var result *models.WeekResult
 	if err := s.runInTx(ctx, func(txSvc *LeagueServiceImpl, _ database.DBTX) error {
 		weekResult, err := txSvc.playNextWeekInStore(ctx)
@@ -152,8 +180,11 @@ func (s *LeagueServiceImpl) playNextWeekLocked(ctx context.Context) (*models.Wee
 		return nil, err
 	}
 
-	s.invalidateCache()
-	s.eventBus.Publish("week_finished", result.Week)
+	s.invalidatePredictionCache("week_played")
+	s.publishEvent(EventWeekPlayed, map[string]interface{}{
+		"week":          result.Week,
+		"matches_count": len(result.Matches),
+	})
 	return result, nil
 }
 
@@ -285,6 +316,9 @@ func (s *LeagueServiceImpl) EditMatch(ctx context.Context, matchID int, homeScor
 		if homeScore < 0 || awayScore < 0 {
 			return fmt.Errorf("scores cannot be negative")
 		}
+		if match.Status != "played" && match.Status != "edited" {
+			return fmt.Errorf("only played matches can be edited")
+		}
 
 		match.HomeScore = &homeScore
 		match.AwayScore = &awayScore
@@ -311,17 +345,21 @@ func (s *LeagueServiceImpl) EditMatch(ctx context.Context, matchID int, homeScor
 		return nil, err
 	}
 
-	s.invalidateCache()
+	s.invalidatePredictionCache("match_edited")
+	s.publishEvent(EventMatchEdited, map[string]interface{}{
+		"match_id":   matchID,
+		"home_score": homeScore,
+		"away_score": awayScore,
+	})
 	return updatedMatch, nil
 }
 
-// GetPredictions runs 1000 Monte Carlo simulations for championship win %
-// Utilizes in-memory caching for massive performance gains
+// GetPredictions runs 1,000 Monte Carlo simulations for championship win probabilities.
 func (s *LeagueServiceImpl) GetPredictions(ctx context.Context) ([]models.Prediction, error) {
 	s.cacheMu.RLock()
-	if s.oracleCache != nil {
+	if s.predictionCache != nil {
 		s.cacheMu.RUnlock()
-		return s.oracleCache, nil
+		return s.predictionCache, nil
 	}
 	s.cacheMu.RUnlock()
 
@@ -426,22 +464,34 @@ func (s *LeagueServiceImpl) GetPredictions(ctx context.Context) ([]models.Predic
 
 	// Save to cache
 	s.cacheMu.Lock()
-	s.oracleCache = predictions
+	s.predictionCache = predictions
 	s.cacheMu.Unlock()
 
 	return predictions, nil
 }
 
-// Rollback reverts the league state to a specific week (Time Machine)
-func (s *LeagueServiceImpl) Rollback(ctx context.Context, week int) error {
+// Rollback reverts the league state to a specific week.
+func (s *LeagueServiceImpl) Rollback(ctx context.Context, week int) (*models.RollbackSummary, error) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
 	if week < 0 || week > totalWeeks {
-		return fmt.Errorf("invalid week %d, must be between 0 and %d", week, totalWeeks)
+		return nil, fmt.Errorf("invalid week %d, must be between 0 and %d", week, totalWeeks)
 	}
 
+	summary := &models.RollbackSummary{
+		TargetWeek:                 week,
+		StandingsRecalculated:      true,
+		PredictionCacheInvalidated: true,
+		TeamMetricsRebuilt:         true,
+	}
 	if err := s.runInTx(ctx, func(txSvc *LeagueServiceImpl, _ database.DBTX) error {
+		matches, err := txSvc.matchRepo.GetAll(ctx)
+		if err != nil {
+			return fmt.Errorf("load matches for rollback summary: %w", err)
+		}
+		summary.ResetMatches, summary.ResetWeeks = summarizeRollback(matches, week)
+
 		if err := txSvc.eventRepo.DeleteFromWeek(ctx, week); err != nil {
 			return fmt.Errorf("failed to rollback events: %w", err)
 		}
@@ -455,11 +505,16 @@ func (s *LeagueServiceImpl) Rollback(ctx context.Context, week int) error {
 		}
 		return nil
 	}); err != nil {
-		return err
+		return nil, err
 	}
 
-	s.invalidateCache()
-	return nil
+	s.invalidatePredictionCache("rollback_completed")
+	s.publishEvent(EventRollbackCompleted, map[string]interface{}{
+		"target_week":   summary.TargetWeek,
+		"reset_matches": summary.ResetMatches,
+		"reset_weeks":   summary.ResetWeeks,
+	})
+	return summary, nil
 }
 
 // GetTeamMetrics returns a team's current metrics
@@ -532,7 +587,11 @@ func (s *LeagueServiceImpl) Reset(ctx context.Context) error {
 	s.eventRepo = database.NewEventRepo(s.db.Conn)
 	s.standingRepo = database.NewStandingRepo(s.db.Conn)
 
-	s.invalidateCache()
+	if err := s.refreshTeamStrengths(ctx, nil); err != nil {
+		return fmt.Errorf("refresh team strengths: %w", err)
+	}
+
+	s.invalidatePredictionCache("league_reset")
 
 	return nil
 }
@@ -617,24 +676,7 @@ func (s *LeagueServiceImpl) calcStandingsFromMatches(teams []models.Team, matche
 		standings = append(standings, *st)
 	}
 
-	sort.Slice(standings, func(i, j int) bool {
-		a, b := standings[i], standings[j]
-		if a.Points != b.Points {
-			return a.Points > b.Points
-		}
-		if a.GD != b.GD {
-			return a.GD > b.GD
-		}
-		if a.GF != b.GF {
-			return a.GF > b.GF
-		}
-		return a.TeamName < b.TeamName
-	})
-
-	for i := range standings {
-		standings[i].Position = i + 1
-	}
-	return standings
+	return models.RankStandings(standings, matches)
 }
 
 func clamp(val, min, max float64) float64 {
@@ -718,6 +760,69 @@ func (s *LeagueServiceImpl) rebuildState(ctx context.Context) error {
 	if err := s.standingRepo.RecalculateAll(ctx, allMatches); err != nil {
 		return err
 	}
+	s.publishEvent(EventStandingsRebuilt, map[string]interface{}{
+		"played_or_edited_matches": countCompletedMatches(allMatches),
+	})
 
+	return nil
+}
+
+func summarizeRollback(matches []models.Match, targetWeek int) (int, []int) {
+	weekSet := make(map[int]bool)
+	resetMatches := 0
+	for _, match := range matches {
+		if match.Week < targetWeek {
+			continue
+		}
+		if match.Status != "scheduled" || match.HomeScore != nil || match.AwayScore != nil {
+			resetMatches++
+			weekSet[match.Week] = true
+		}
+	}
+
+	var weeks []int
+	for week := range weekSet {
+		weeks = append(weeks, week)
+	}
+	sort.Ints(weeks)
+	return resetMatches, weeks
+}
+
+func countCompletedMatches(matches []models.Match) int {
+	count := 0
+	for _, match := range matches {
+		if match.Status == "played" || match.Status == "edited" {
+			count++
+		}
+	}
+	return count
+}
+
+func (s *LeagueServiceImpl) refreshTeamStrengths(ctx context.Context, teams []models.Team) error {
+	if s.strength == nil {
+		return nil
+	}
+	if teams == nil {
+		var err error
+		teams, err = s.teamRepo.GetAll(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, team := range teams {
+		baseStrength, err := s.strength.BaseStrength(ctx, team)
+		if err != nil {
+			return fmt.Errorf("resolve strength for %s: %w", team.Name, err)
+		}
+		if baseStrength == team.BaseStrength {
+			continue
+		}
+		team.BaseStrength = baseStrength
+		team.CurrentStrength = baseStrength
+		if err := s.teamRepo.Update(ctx, &team); err != nil {
+			return fmt.Errorf("persist strength for %s: %w", team.Name, err)
+		}
+	}
 	return nil
 }

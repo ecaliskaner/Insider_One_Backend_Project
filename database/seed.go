@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"log"
 
-	"github.com/insider/league-simulation/models"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/models"
 )
 
 // DefaultTeams returns the 4 teams with realistic attributes

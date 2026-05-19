@@ -7,10 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/insider/league-simulation/database"
-	"github.com/insider/league-simulation/handlers"
-	"github.com/insider/league-simulation/router"
-	"github.com/insider/league-simulation/services"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/database"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/handlers"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/router"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -31,7 +31,7 @@ func setupTestServer() *httptest.Server {
 	leagueService := services.NewLeagueService(db, engine, weather)
 	handler := handlers.NewLeagueHandler(leagueService)
 
-	r := router.NewRouter(handler)
+	r := router.NewRouter(handler, db)
 	return httptest.NewServer(r)
 }
 
@@ -70,6 +70,29 @@ func doRequestWithStatus(t *testing.T, client *http.Client, method, url string, 
 	return respData, resp.StatusCode
 }
 
+func doRawRequestWithStatus(t *testing.T, client *http.Client, method, url, contentType, body string) (map[string]interface{}, int) {
+	t.Helper()
+
+	req, err := http.NewRequest(method, url, bytes.NewBufferString(body))
+	require.NoError(t, err)
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	bodyBytes := new(bytes.Buffer)
+	_, err = bodyBytes.ReadFrom(resp.Body)
+	require.NoError(t, err)
+
+	var respData map[string]interface{}
+	err = json.Unmarshal(bodyBytes.Bytes(), &respData)
+	require.NoError(t, err, "Failed to decode response: %s", bodyBytes.String())
+	return respData, resp.StatusCode
+}
+
 func resetLeague(t *testing.T, client *http.Client, baseURL string) {
 	t.Helper()
 	doRequest(t, client, "POST", baseURL+"/api/v1/league/reset", nil)
@@ -93,7 +116,7 @@ func TestE2E_LeagueFlow(t *testing.T) {
 
 	playWeeks(t, client, ts.URL, 4)
 
-	resp := doRequest(t, client, "GET", ts.URL+"/api/v1/simulation/oracle", nil)
+	resp := doRequest(t, client, "GET", ts.URL+"/api/v1/simulation/championship-probabilities", nil)
 	meta := resp["meta"].(map[string]interface{})
 	assert.Equal(t, float64(1000), meta["simulation_count"])
 	data := resp["data"].([]interface{})
@@ -105,12 +128,49 @@ func TestE2E_LeagueFlow(t *testing.T) {
 	resp = doRequest(t, client, "POST", ts.URL+"/api/v1/league/rollback/2", nil)
 	meta = resp["meta"].(map[string]interface{})
 	assert.Equal(t, float64(2), meta["current_week"])
+	summary := meta["summary"].(map[string]interface{})
+	assert.Equal(t, float64(2), summary["target_week"])
+	assert.Equal(t, float64(6), summary["reset_matches"])
+	assert.Equal(t, true, summary["standings_recalculated"])
+	assert.Equal(t, true, summary["prediction_cache_invalidated"])
 
 	doRequest(t, client, "POST", ts.URL+"/api/v1/league/play-all", nil)
 
 	resp = doRequest(t, client, "GET", ts.URL+"/api/v1/league/table", nil)
 	meta = resp["meta"].(map[string]interface{})
 	assert.Equal(t, float64(7), meta["current_week"]) // Next week after 6 is 7
+}
+
+func TestHealthAndReadinessEndpoints(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resp := doRequest(t, client, "GET", ts.URL+"/healthz", nil)
+	assert.Equal(t, "ok", resp["data"].(map[string]interface{})["status"])
+
+	resp = doRequest(t, client, "GET", ts.URL+"/api/v1/health", nil)
+	assert.Equal(t, "ok", resp["data"].(map[string]interface{})["status"])
+
+	resp = doRequest(t, client, "GET", ts.URL+"/readyz", nil)
+	assert.Equal(t, "ready", resp["data"].(map[string]interface{})["status"])
+}
+
+func TestRequestIDHeader_IsReturned(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	req, err := http.NewRequest(http.MethodGet, ts.URL+"/healthz", nil)
+	require.NoError(t, err)
+	req.Header.Set("X-Request-ID", "case-review-123")
+
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	assert.Equal(t, "case-review-123", resp.Header.Get("X-Request-ID"))
 }
 
 func TestPlayNextWeek_AllowsFinalWeekAndRejectsAfterSeason(t *testing.T) {
@@ -173,7 +233,7 @@ func TestEditMatch_RequiresBothScores(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, statusCode)
 	assert.Equal(t, "Invalid Request Body", resp["title"])
-	assert.Equal(t, "Both home_score and away_score are required.", resp["detail"])
+	assert.Equal(t, "both home_score and away_score are required.", resp["detail"])
 }
 
 func TestEditMatch_RejectsUnknownFields(t *testing.T) {
@@ -206,11 +266,58 @@ func TestEditMatch_RejectsNegativeScores(t *testing.T) {
 	})
 
 	assert.Equal(t, http.StatusBadRequest, statusCode)
-	assert.Equal(t, "Match Edit Failed", resp["title"])
-	assert.Equal(t, "scores cannot be negative", resp["detail"])
+	assert.Equal(t, "Invalid Request Body", resp["title"])
+	assert.Equal(t, "scores cannot be negative.", resp["detail"])
 }
 
-func TestOracle_RejectsPrematureRequest(t *testing.T) {
+func TestEditMatch_RejectsMalformedJSON(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resetLeague(t, client, ts.URL)
+	playWeeks(t, client, ts.URL, 1)
+
+	resp, statusCode := doRawRequestWithStatus(t, client, http.MethodPut, ts.URL+"/api/v1/matches/1", "application/json", `{"home_score":`)
+
+	assert.Equal(t, http.StatusBadRequest, statusCode)
+	assert.Equal(t, "Invalid Request Body", resp["title"])
+	assert.Contains(t, resp["detail"], "malformed JSON request body")
+}
+
+func TestEditMatch_RejectsWrongContentType(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resetLeague(t, client, ts.URL)
+	playWeeks(t, client, ts.URL, 1)
+
+	resp, statusCode := doRawRequestWithStatus(t, client, http.MethodPut, ts.URL+"/api/v1/matches/1", "text/plain", `{"home_score": 2, "away_score": 1}`)
+
+	assert.Equal(t, http.StatusBadRequest, statusCode)
+	assert.Equal(t, "Invalid Request Body", resp["title"])
+	assert.Equal(t, "Content-Type must be application/json.", resp["detail"])
+}
+
+func TestEditMatch_RejectsScheduledMatch(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resetLeague(t, client, ts.URL)
+
+	resp, statusCode := doRequestWithStatus(t, client, "PUT", ts.URL+"/api/v1/matches/1", map[string]int{
+		"home_score": 2,
+		"away_score": 1,
+	})
+
+	assert.Equal(t, http.StatusBadRequest, statusCode)
+	assert.Equal(t, "Match Edit Failed", resp["title"])
+	assert.Equal(t, "only played matches can be edited", resp["detail"])
+}
+
+func TestChampionshipProbabilities_RejectPrematureRequest(t *testing.T) {
 	ts := setupTestServer()
 	defer ts.Close()
 	client := ts.Client()
@@ -218,10 +325,10 @@ func TestOracle_RejectsPrematureRequest(t *testing.T) {
 	resetLeague(t, client, ts.URL)
 	playWeeks(t, client, ts.URL, 3)
 
-	resp, statusCode := doRequestWithStatus(t, client, "GET", ts.URL+"/api/v1/simulation/oracle", nil)
+	resp, statusCode := doRequestWithStatus(t, client, "GET", ts.URL+"/api/v1/simulation/championship-probabilities", nil)
 
 	assert.Equal(t, http.StatusBadRequest, statusCode)
-	assert.Equal(t, "Premature Oracle Request", resp["title"])
+	assert.Equal(t, "Premature Championship Probability Request", resp["title"])
 }
 
 func TestRollback_RejectsOutOfRangeWeek(t *testing.T) {
@@ -235,6 +342,42 @@ func TestRollback_RejectsOutOfRangeWeek(t *testing.T) {
 
 	assert.Equal(t, http.StatusBadRequest, statusCode)
 	assert.Equal(t, "Invalid Rollback Target Bounds", resp["title"])
+}
+
+func TestRollback_IsIdempotentAndPreservesRebuildConsistency(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resetLeague(t, client, ts.URL)
+	playWeeks(t, client, ts.URL, 3)
+
+	doRequest(t, client, "POST", ts.URL+"/api/v1/league/rollback/2", nil)
+	resp := doRequest(t, client, "POST", ts.URL+"/api/v1/league/rollback/2", nil)
+	meta := resp["meta"].(map[string]interface{})
+	assert.Equal(t, float64(2), meta["current_week"])
+	summary := meta["summary"].(map[string]interface{})
+	assert.Equal(t, float64(0), summary["reset_matches"])
+	assert.Empty(t, summary["reset_weeks"])
+
+	table := doRequest(t, client, "GET", ts.URL+"/api/v1/league/table", nil)
+	standings := table["data"].([]interface{})
+	totalPlayed := 0
+	for _, row := range standings {
+		totalPlayed += int(row.(map[string]interface{})["played"].(float64))
+	}
+	assert.Equal(t, 4, totalPlayed)
+}
+
+func TestTeamMetrics_RejectsInvalidTeamID(t *testing.T) {
+	ts := setupTestServer()
+	defer ts.Close()
+	client := ts.Client()
+
+	resp, statusCode := doRequestWithStatus(t, client, "GET", ts.URL+"/api/v1/teams/not-a-number/metrics", nil)
+
+	assert.Equal(t, http.StatusBadRequest, statusCode)
+	assert.Equal(t, "Invalid Team ID", resp["title"])
 }
 
 func TestPlayAll_RejectsCompletedSeason(t *testing.T) {
