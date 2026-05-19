@@ -47,9 +47,7 @@ jobs:
           version: v2.12.2
 
       - name: Run gosec (Security Scanner)
-        uses: securego/gosec@v2.26.1
-        with:
-          args: ./...
+        run: go run github.com/securego/gosec/v2/cmd/gosec@v2.26.1 ./...
 
   docker-build:
     name: Docker Build Validation
