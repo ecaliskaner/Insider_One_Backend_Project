@@ -119,7 +119,7 @@ JOIN teams t ON s.team_id = t.id
 ORDER BY s.points DESC, s.gd DESC, s.gf DESC, t.name ASC;
 ```
 
-The repository applies an additional tied-team head-to-head sort in Go when teams are equal on points, goal difference, and goals for.
+The repository delegates final ordering to the shared standings ranking function, including tied-team head-to-head sorting when teams are equal on points, goal difference, and goals for.
 
 ### Current Week
 

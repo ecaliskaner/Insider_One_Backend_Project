@@ -41,8 +41,8 @@ DB_PATH=<temp-db> SIM_SEED=42 go run . serve
 | TC-006 | Reject play after season completion | seventh call to `POST /api/v1/league/next-week` | `400 Bad Request`; title is `Season Overrun Prevented` | Season boundary |
 | TC-007 | Play all remaining weeks | `POST /api/v1/league/play-all` | `200 OK`; all remaining matches are grouped by week | Extra requirement |
 | TC-008 | Reject play all after completion | repeat `POST /api/v1/league/play-all` after completed season | `400 Bad Request`; detail says all weeks have already been played | Edge case |
-| TC-009 | Oracle before allowed week | `GET /api/v1/simulation/oracle` before week 5 | `400 Bad Request`; title is `Premature Oracle Request` | Prediction gating |
-| TC-010 | Oracle after week 4 | `GET /api/v1/simulation/oracle` after four weeks have been played | `200 OK`; returns four championship probabilities | Prediction requirement |
+| TC-009 | Championship probabilities before allowed week | `GET /api/v1/simulation/championship-probabilities` before week 5 | `400 Bad Request`; title is `Premature Championship Probability Request` | Prediction gating |
+| TC-010 | Championship probabilities after week 4 | `GET /api/v1/simulation/championship-probabilities` after four weeks have been played | `200 OK`; returns four championship probabilities | Prediction requirement |
 | TC-011 | Overview after week 4 | `GET /api/v1/league/overview` after four weeks have been played | `200 OK`; includes `predictions` with four entries | Case screen with estimation |
 | TC-012 | Get match details | `GET /api/v1/matches/1` | `200 OK`; returns match and event list | Match status visibility |
 | TC-013 | Edit match result | `PUT /api/v1/matches/1` with both scores | `200 OK`; match status is edited and standings rebuild | Extra requirement |
@@ -72,7 +72,7 @@ DB_PATH=<temp-db> SIM_SEED=42 go run . serve
 | Missing edit score is rejected | `TestEditMatch_RequiresBothScores` |
 | Unknown edit field is rejected | `TestEditMatch_RejectsUnknownFields` |
 | Negative edit score is rejected | `TestEditMatch_RejectsNegativeScores` |
-| Premature oracle request is rejected | `TestOracle_RejectsPrematureRequest` |
+| Premature championship probability request is rejected | `TestChampionshipProbabilities_RejectPrematureRequest` |
 | Out-of-range rollback is rejected | `TestRollback_RejectsOutOfRangeWeek` |
 | Completed season rejects another play-all | `TestPlayAll_RejectsCompletedSeason` |
 | Missing match returns 404 | `TestGetMatch_ReturnsNotFoundForMissingMatch` |
@@ -102,9 +102,9 @@ Live API smoke test against a temporary SQLite database and `SIM_SEED=42`:
 TC-001 reset                         PASS
 TC-002 standings                     PASS
 TC-003 overview before predictions   PASS
-TC-009 premature oracle              PASS
+TC-009 premature championship probabilities              PASS
 TC-004 play weeks 1-4                PASS
-TC-010 oracle after week 4           PASS
+TC-010 championship probabilities after week 4           PASS
 TC-011 overview with predictions     PASS
 TC-014 missing score                 PASS
 TC-015 unknown field                 PASS

@@ -250,7 +250,7 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/handlers.ProblemDetails'
-      summary: Time Machine rollback
+      summary: Rollback league state
       tags:
       - league
   /league/table:
@@ -334,7 +334,7 @@ paths:
       summary: Edit match result
       tags:
       - matches
-  /simulation/oracle:
+  /simulation/championship-probabilities:
     get:
       description: Runs 1,000 Monte Carlo simulations to calculate Championship Win
         %
@@ -354,7 +354,7 @@ paths:
           description: Internal Server Error
           schema:
             $ref: '#/definitions/handlers.ProblemDetails'
-      summary: Monte Carlo predictions
+      summary: Championship probabilities
       tags:
       - simulation
   /teams/{id}/metrics:

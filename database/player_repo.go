@@ -3,7 +3,7 @@ package database
 import (
 	"context"
 
-	"github.com/insider/league-simulation/models"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/models"
 )
 
 // PlayerRepo implements models.PlayerRepository

@@ -11,7 +11,7 @@ import (
 var rootCmd = &cobra.Command{
 	Use:   "insider",
 	Short: "Insider Football League Simulation API",
-	Long:  `A sophisticated REST API that simulates a football league using a Poisson-based match engine, Monte Carlo predictions, and a Time Machine rollback feature.`,
+	Long:  `A REST API that simulates a football league using a Poisson-based match engine, Monte Carlo championship probabilities, and rollback support.`,
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

@@ -8,8 +8,8 @@ import (
 	"sort"
 	"sync"
 
-	"github.com/insider/league-simulation/database"
-	"github.com/insider/league-simulation/models"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/database"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/models"
 )
 
 const totalWeeks = 6
@@ -27,10 +27,10 @@ type LeagueServiceImpl struct {
 	db           *database.DB
 
 	// Advanced Architecture Features
-	eventBus    *EventBus
-	cacheMu     sync.RWMutex
-	oracleCache []models.Prediction
-	stateMu     sync.RWMutex
+	eventBus        *EventBus
+	cacheMu         sync.RWMutex
+	predictionCache []models.Prediction
+	stateMu         sync.RWMutex
 }
 
 // NewLeagueService creates a new LeagueServiceImpl with dependency injection
@@ -54,7 +54,7 @@ func NewLeagueService(db *database.DB, engine MatchEngine, weather WeatherAdapte
 
 func (s *LeagueServiceImpl) invalidateCache() {
 	s.cacheMu.Lock()
-	s.oracleCache = nil
+	s.predictionCache = nil
 	s.cacheMu.Unlock()
 }
 
@@ -315,13 +315,12 @@ func (s *LeagueServiceImpl) EditMatch(ctx context.Context, matchID int, homeScor
 	return updatedMatch, nil
 }
 
-// GetPredictions runs 1000 Monte Carlo simulations for championship win %
-// Utilizes in-memory caching for massive performance gains
+// GetPredictions runs 1,000 Monte Carlo simulations for championship win probabilities.
 func (s *LeagueServiceImpl) GetPredictions(ctx context.Context) ([]models.Prediction, error) {
 	s.cacheMu.RLock()
-	if s.oracleCache != nil {
+	if s.predictionCache != nil {
 		s.cacheMu.RUnlock()
-		return s.oracleCache, nil
+		return s.predictionCache, nil
 	}
 	s.cacheMu.RUnlock()
 
@@ -426,13 +425,13 @@ func (s *LeagueServiceImpl) GetPredictions(ctx context.Context) ([]models.Predic
 
 	// Save to cache
 	s.cacheMu.Lock()
-	s.oracleCache = predictions
+	s.predictionCache = predictions
 	s.cacheMu.Unlock()
 
 	return predictions, nil
 }
 
-// Rollback reverts the league state to a specific week (Time Machine)
+// Rollback reverts the league state to a specific week.
 func (s *LeagueServiceImpl) Rollback(ctx context.Context, week int) error {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
@@ -617,24 +616,7 @@ func (s *LeagueServiceImpl) calcStandingsFromMatches(teams []models.Team, matche
 		standings = append(standings, *st)
 	}
 
-	sort.Slice(standings, func(i, j int) bool {
-		a, b := standings[i], standings[j]
-		if a.Points != b.Points {
-			return a.Points > b.Points
-		}
-		if a.GD != b.GD {
-			return a.GD > b.GD
-		}
-		if a.GF != b.GF {
-			return a.GF > b.GF
-		}
-		return a.TeamName < b.TeamName
-	})
-
-	for i := range standings {
-		standings[i].Position = i + 1
-	}
-	return standings
+	return models.RankStandings(standings, matches)
 }
 
 func clamp(val, min, max float64) float64 {

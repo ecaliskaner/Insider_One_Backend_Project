@@ -3,7 +3,7 @@ package handlers
 import (
 	"net/http"
 
-	"github.com/insider/league-simulation/database"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/database"
 )
 
 // HealthHandler serves platform health probes.

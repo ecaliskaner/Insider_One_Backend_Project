@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"github.com/insider/league-simulation/database"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/database"
 )
 
 func BenchmarkLeagueService_GetPredictions(b *testing.B) {

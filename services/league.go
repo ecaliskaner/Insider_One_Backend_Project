@@ -2,7 +2,7 @@ package services
 
 import (
 	"context"
-	"github.com/insider/league-simulation/models"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/models"
 )
 
 // LeagueService defines the core league operations interface.
@@ -29,7 +29,7 @@ type LeagueService interface {
 	// GetPredictions runs Monte Carlo simulations for championship win %
 	GetPredictions(ctx context.Context) ([]models.Prediction, error)
 
-	// Rollback reverts database state to a specific week (Time Machine)
+	// Rollback reverts database state to a specific week.
 	Rollback(ctx context.Context, week int) error
 
 	// GetTeamMetrics returns a team's current strength, morale, fatigue, market value

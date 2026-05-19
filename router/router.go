@@ -3,10 +3,10 @@ package router
 import (
 	"net/http"
 
+	"github.com/ecaliskaner/Insider_One_Backend_Project/database"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/handlers"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/middleware"
 	"github.com/gorilla/mux"
-	"github.com/insider/league-simulation/database"
-	"github.com/insider/league-simulation/handlers"
-	"github.com/insider/league-simulation/middleware"
 	httpSwagger "github.com/swaggo/http-swagger"
 )
 
@@ -39,10 +39,10 @@ func NewRouter(handler *handlers.LeagueHandler, db *database.DB) *mux.Router {
 	// PUT  /api/v1/matches/{id} — Edit match result
 	v1.HandleFunc("/matches/{id}", handler.EditMatch).Methods(http.MethodPut)
 
-	// GET  /api/v1/simulation/oracle — Monte Carlo predictions
-	v1.HandleFunc("/simulation/oracle", handler.GetOracle).Methods(http.MethodGet)
+	// GET  /api/v1/simulation/championship-probabilities — Monte Carlo predictions
+	v1.HandleFunc("/simulation/championship-probabilities", handler.GetChampionshipProbabilities).Methods(http.MethodGet)
 
-	// POST /api/v1/league/rollback/{week} — Time Machine
+	// POST /api/v1/league/rollback/{week} — Rollback league state
 	v1.HandleFunc("/league/rollback/{week}", handler.Rollback).Methods(http.MethodPost)
 
 	// GET  /api/v1/teams/{id}/metrics — Team metrics

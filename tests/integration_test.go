@@ -7,10 +7,10 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/insider/league-simulation/database"
-	"github.com/insider/league-simulation/handlers"
-	"github.com/insider/league-simulation/router"
-	"github.com/insider/league-simulation/services"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/database"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/handlers"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/router"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/services"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -93,7 +93,7 @@ func TestE2E_LeagueFlow(t *testing.T) {
 
 	playWeeks(t, client, ts.URL, 4)
 
-	resp := doRequest(t, client, "GET", ts.URL+"/api/v1/simulation/oracle", nil)
+	resp := doRequest(t, client, "GET", ts.URL+"/api/v1/simulation/championship-probabilities", nil)
 	meta := resp["meta"].(map[string]interface{})
 	assert.Equal(t, float64(1000), meta["simulation_count"])
 	data := resp["data"].([]interface{})
@@ -239,7 +239,7 @@ func TestEditMatch_RejectsNegativeScores(t *testing.T) {
 	assert.Equal(t, "scores cannot be negative", resp["detail"])
 }
 
-func TestOracle_RejectsPrematureRequest(t *testing.T) {
+func TestChampionshipProbabilities_RejectPrematureRequest(t *testing.T) {
 	ts := setupTestServer()
 	defer ts.Close()
 	client := ts.Client()
@@ -247,10 +247,10 @@ func TestOracle_RejectsPrematureRequest(t *testing.T) {
 	resetLeague(t, client, ts.URL)
 	playWeeks(t, client, ts.URL, 3)
 
-	resp, statusCode := doRequestWithStatus(t, client, "GET", ts.URL+"/api/v1/simulation/oracle", nil)
+	resp, statusCode := doRequestWithStatus(t, client, "GET", ts.URL+"/api/v1/simulation/championship-probabilities", nil)
 
 	assert.Equal(t, http.StatusBadRequest, statusCode)
-	assert.Equal(t, "Premature Oracle Request", resp["title"])
+	assert.Equal(t, "Premature Championship Probability Request", resp["title"])
 }
 
 func TestRollback_RejectsOutOfRangeWeek(t *testing.T) {

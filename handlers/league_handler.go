@@ -8,8 +8,8 @@ import (
 	"net/http"
 	"strconv"
 
+	"github.com/ecaliskaner/Insider_One_Backend_Project/services"
 	"github.com/gorilla/mux"
-	"github.com/insider/league-simulation/services"
 )
 
 // LeagueHandler handles HTTP requests for the league API
@@ -243,16 +243,16 @@ func (h *LeagueHandler) EditMatch(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetOracle godoc
-// @Summary      Monte Carlo predictions
+// GetChampionshipProbabilities godoc
+// @Summary      Championship probabilities
 // @Description  Runs 1,000 Monte Carlo simulations to calculate Championship Win %
 // @Tags         simulation
 // @Produce      json
 // @Success      200  {object}  map[string]interface{}
 // @Failure      400  {object}  ProblemDetails
 // @Failure      500  {object}  ProblemDetails
-// @Router       /simulation/oracle [get]
-func (h *LeagueHandler) GetOracle(w http.ResponseWriter, r *http.Request) {
+// @Router       /simulation/championship-probabilities [get]
+func (h *LeagueHandler) GetChampionshipProbabilities(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	currentWeek, err := h.service.GetCurrentWeek(ctx)
 	if err != nil {
@@ -262,16 +262,16 @@ func (h *LeagueHandler) GetOracle(w http.ResponseWriter, r *http.Request) {
 
 	if currentWeek <= 4 {
 		WriteProblem(w, r, http.StatusBadRequest,
-			"Premature Oracle Request",
+			"Premature Championship Probability Request",
 			"Championship win probabilities are mathematically volatile and unavailable until Week 4 data constraints are met.",
-			"https://api.insiderfootball.com/errors/premature-oracle",
+			"https://api.insiderfootball.com/errors/premature-championship-probabilities",
 		)
 		return
 	}
 
 	predictions, err := h.service.GetPredictions(ctx)
 	if err != nil {
-		WriteProblem(w, r, http.StatusBadRequest, "Oracle Error", err.Error(), "https://api.insiderfootball.com/errors/oracle-failed")
+		WriteProblem(w, r, http.StatusBadRequest, "Championship Probability Error", err.Error(), "https://api.insiderfootball.com/errors/championship-probabilities-failed")
 		return
 	}
 	standings, err := h.service.GetStandings(r.Context())
@@ -286,7 +286,7 @@ func (h *LeagueHandler) GetOracle(w http.ResponseWriter, r *http.Request) {
 }
 
 // Rollback godoc
-// @Summary      Time Machine rollback
+// @Summary      Rollback league state
 // @Description  Reverts database state to a specific week
 // @Tags         league
 // @Produce      json

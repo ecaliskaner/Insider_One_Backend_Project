@@ -145,7 +145,7 @@ const docTemplate = `{
                 "tags": [
                     "league"
                 ],
-                "summary": "Time Machine rollback",
+                "summary": "Rollback league state",
                 "parameters": [
                     {
                         "type": "integer",
@@ -299,7 +299,7 @@ const docTemplate = `{
                 }
             }
         },
-        "/simulation/oracle": {
+        "/simulation/championship-probabilities": {
             "get": {
                 "description": "Runs 1,000 Monte Carlo simulations to calculate Championship Win %",
                 "produces": [
@@ -308,7 +308,7 @@ const docTemplate = `{
                 "tags": [
                     "simulation"
                 ],
-                "summary": "Monte Carlo predictions",
+                "summary": "Championship probabilities",
                 "responses": {
                     "200": {
                         "description": "OK",

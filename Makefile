@@ -14,7 +14,7 @@ run: build
 test:
 	go test ./... -v
 
-# Run Oracle benchmarks
+# Run championship probability benchmarks
 bench:
 	go test ./services -bench=BenchmarkLeagueService_GetPredictions -benchmem -run '^$$'
 

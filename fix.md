@@ -41,7 +41,7 @@ Ama şu haliyle biraz fazla özellik eklenmiş, bazıları tam oturmamış. Seni
 3) Edit/rollback sonrası standings ve team metrics hesaplamasını tek deterministik “rebuild state from matches” fonksiyonuna bağla.
 4) API response formatını standartlaştır: success, data, error, meta.
 5) context.Context repository/service katmanına geçir. Bu senior backend artısıdır.
-6) Integration test ekle: reset → 4 hafta oyna → oracle → edit → rollback → play-all.
+6) Integration test ekle: reset → 4 hafta oyna → championship probabilities → edit → rollback → play-all.
 7) Postman collection veya Bruno collection ekle. Değerlendiren kişi tek tıkla deneyebilsin.
 8) README’ye “Case Requirements Mapping” tablosu koy. Değerlendirici aradığı maddeyi hemen görsün.
 9) Canlı deploy linki varsa çok öne geçirir. Render/Fly.io/Railway gibi basit bir deployment yeterli.

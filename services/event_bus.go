@@ -3,7 +3,7 @@ package services
 import (
 	"sync"
 
-	"github.com/insider/league-simulation/models"
+	"github.com/ecaliskaner/Insider_One_Backend_Project/models"
 )
 
 // MatchFinishedEvent is the payload for the event bus

@@ -72,11 +72,11 @@
           "response": []
         },
         {
-          "name": "Oracle Predictions",
+          "name": "Championship Probabilities",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/api/v1/simulation/oracle"
+            "url": "{{base_url}}/api/v1/simulation/championship-probabilities"
           },
           "response": []
         },
@@ -146,11 +146,11 @@
       "name": "Validation And Error Cases",
       "item": [
         {
-          "name": "Oracle Before Week 4",
+          "name": "Championship Probabilities Before Week 4",
           "request": {
             "method": "GET",
             "header": [],
-            "url": "{{base_url}}/api/v1/simulation/oracle"
+            "url": "{{base_url}}/api/v1/simulation/championship-probabilities"
           },
           "response": []
         },
