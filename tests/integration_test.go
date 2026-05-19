@@ -128,6 +128,11 @@ func TestE2E_LeagueFlow(t *testing.T) {
 	resp = doRequest(t, client, "POST", ts.URL+"/api/v1/league/rollback/2", nil)
 	meta = resp["meta"].(map[string]interface{})
 	assert.Equal(t, float64(2), meta["current_week"])
+	summary := meta["summary"].(map[string]interface{})
+	assert.Equal(t, float64(2), summary["target_week"])
+	assert.Equal(t, float64(6), summary["reset_matches"])
+	assert.Equal(t, true, summary["standings_recalculated"])
+	assert.Equal(t, true, summary["prediction_cache_invalidated"])
 
 	doRequest(t, client, "POST", ts.URL+"/api/v1/league/play-all", nil)
 
@@ -142,6 +147,9 @@ func TestHealthAndReadinessEndpoints(t *testing.T) {
 	client := ts.Client()
 
 	resp := doRequest(t, client, "GET", ts.URL+"/healthz", nil)
+	assert.Equal(t, "ok", resp["data"].(map[string]interface{})["status"])
+
+	resp = doRequest(t, client, "GET", ts.URL+"/api/v1/health", nil)
 	assert.Equal(t, "ok", resp["data"].(map[string]interface{})["status"])
 
 	resp = doRequest(t, client, "GET", ts.URL+"/readyz", nil)
@@ -348,6 +356,9 @@ func TestRollback_IsIdempotentAndPreservesRebuildConsistency(t *testing.T) {
 	resp := doRequest(t, client, "POST", ts.URL+"/api/v1/league/rollback/2", nil)
 	meta := resp["meta"].(map[string]interface{})
 	assert.Equal(t, float64(2), meta["current_week"])
+	summary := meta["summary"].(map[string]interface{})
+	assert.Equal(t, float64(0), summary["reset_matches"])
+	assert.Empty(t, summary["reset_weeks"])
 
 	table := doRequest(t, client, "GET", ts.URL+"/api/v1/league/table", nil)
 	standings := table["data"].([]interface{})

@@ -30,7 +30,7 @@ type LeagueService interface {
 	GetPredictions(ctx context.Context) ([]models.Prediction, error)
 
 	// Rollback reverts database state to a specific week.
-	Rollback(ctx context.Context, week int) error
+	Rollback(ctx context.Context, week int) (*models.RollbackSummary, error)
 
 	// GetTeamMetrics returns a team's current strength, morale, fatigue, market value
 	GetTeamMetrics(ctx context.Context, teamID int) (*models.TeamMetrics, error)

@@ -57,6 +57,7 @@ func LoggingMiddleware(next http.Handler) http.Handler {
 			slog.String("path", r.URL.Path),
 			slog.Int("status", rw.statusCode),
 			slog.String("duration", duration.String()),
+			slog.Int64("duration_ms", duration.Milliseconds()),
 			slog.String("ip", getIP(r)),
 			slog.String("request_id", RequestIDFromContext(r.Context())),
 		)

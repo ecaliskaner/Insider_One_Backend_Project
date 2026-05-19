@@ -15,6 +15,13 @@ func NewHealthHandler(db *database.DB) *HealthHandler {
 	return &HealthHandler{db: db}
 }
 
+// Healthz godoc
+// @Summary      Health check
+// @Description  Returns process liveness status.
+// @Tags         health
+// @Produce      json
+// @Success      200  {object}  map[string]interface{}
+// @Router       /health [get]
 func (h *HealthHandler) Healthz(w http.ResponseWriter, r *http.Request) {
 	respondJSON(w, http.StatusOK, map[string]string{
 		"status": "ok",

@@ -48,7 +48,7 @@ func NewLeagueService(db *database.DB, engine MatchEngine, weather WeatherAdapte
 		eventBus:     eb,
 	}
 
-	StartListeners(eb, svc)
+	StartListeners(eb)
 	return svc
 }
 
@@ -56,6 +56,20 @@ func (s *LeagueServiceImpl) invalidateCache() {
 	s.cacheMu.Lock()
 	s.predictionCache = nil
 	s.cacheMu.Unlock()
+}
+
+func (s *LeagueServiceImpl) invalidatePredictionCache(reason string) {
+	s.invalidateCache()
+	s.publishEvent(EventPredictionCacheInvalidated, map[string]interface{}{
+		"reason": reason,
+	})
+}
+
+func (s *LeagueServiceImpl) publishEvent(topic string, fields map[string]interface{}) {
+	if s.eventBus == nil {
+		return
+	}
+	s.eventBus.Publish(topic, DomainEvent{Name: topic, Fields: fields})
 }
 
 func (s *LeagueServiceImpl) runInTx(ctx context.Context, fn func(*LeagueServiceImpl, database.DBTX) error) error {
@@ -152,8 +166,11 @@ func (s *LeagueServiceImpl) playNextWeekLocked(ctx context.Context) (*models.Wee
 		return nil, err
 	}
 
-	s.invalidateCache()
-	s.eventBus.Publish("week_finished", result.Week)
+	s.invalidatePredictionCache("week_played")
+	s.publishEvent(EventWeekPlayed, map[string]interface{}{
+		"week":          result.Week,
+		"matches_count": len(result.Matches),
+	})
 	return result, nil
 }
 
@@ -314,7 +331,12 @@ func (s *LeagueServiceImpl) EditMatch(ctx context.Context, matchID int, homeScor
 		return nil, err
 	}
 
-	s.invalidateCache()
+	s.invalidatePredictionCache("match_edited")
+	s.publishEvent(EventMatchEdited, map[string]interface{}{
+		"match_id":   matchID,
+		"home_score": homeScore,
+		"away_score": awayScore,
+	})
 	return updatedMatch, nil
 }
 
@@ -435,15 +457,27 @@ func (s *LeagueServiceImpl) GetPredictions(ctx context.Context) ([]models.Predic
 }
 
 // Rollback reverts the league state to a specific week.
-func (s *LeagueServiceImpl) Rollback(ctx context.Context, week int) error {
+func (s *LeagueServiceImpl) Rollback(ctx context.Context, week int) (*models.RollbackSummary, error) {
 	s.stateMu.Lock()
 	defer s.stateMu.Unlock()
 
 	if week < 0 || week > totalWeeks {
-		return fmt.Errorf("invalid week %d, must be between 0 and %d", week, totalWeeks)
+		return nil, fmt.Errorf("invalid week %d, must be between 0 and %d", week, totalWeeks)
 	}
 
+	summary := &models.RollbackSummary{
+		TargetWeek:                 week,
+		StandingsRecalculated:      true,
+		PredictionCacheInvalidated: true,
+		TeamMetricsRebuilt:         true,
+	}
 	if err := s.runInTx(ctx, func(txSvc *LeagueServiceImpl, _ database.DBTX) error {
+		matches, err := txSvc.matchRepo.GetAll(ctx)
+		if err != nil {
+			return fmt.Errorf("load matches for rollback summary: %w", err)
+		}
+		summary.ResetMatches, summary.ResetWeeks = summarizeRollback(matches, week)
+
 		if err := txSvc.eventRepo.DeleteFromWeek(ctx, week); err != nil {
 			return fmt.Errorf("failed to rollback events: %w", err)
 		}
@@ -457,11 +491,16 @@ func (s *LeagueServiceImpl) Rollback(ctx context.Context, week int) error {
 		}
 		return nil
 	}); err != nil {
-		return err
+		return nil, err
 	}
 
-	s.invalidateCache()
-	return nil
+	s.invalidatePredictionCache("rollback_completed")
+	s.publishEvent(EventRollbackCompleted, map[string]interface{}{
+		"target_week":   summary.TargetWeek,
+		"reset_matches": summary.ResetMatches,
+		"reset_weeks":   summary.ResetWeeks,
+	})
+	return summary, nil
 }
 
 // GetTeamMetrics returns a team's current metrics
@@ -534,7 +573,7 @@ func (s *LeagueServiceImpl) Reset(ctx context.Context) error {
 	s.eventRepo = database.NewEventRepo(s.db.Conn)
 	s.standingRepo = database.NewStandingRepo(s.db.Conn)
 
-	s.invalidateCache()
+	s.invalidatePredictionCache("league_reset")
 
 	return nil
 }
@@ -703,6 +742,40 @@ func (s *LeagueServiceImpl) rebuildState(ctx context.Context) error {
 	if err := s.standingRepo.RecalculateAll(ctx, allMatches); err != nil {
 		return err
 	}
+	s.publishEvent(EventStandingsRebuilt, map[string]interface{}{
+		"played_or_edited_matches": countCompletedMatches(allMatches),
+	})
 
 	return nil
+}
+
+func summarizeRollback(matches []models.Match, targetWeek int) (int, []int) {
+	weekSet := make(map[int]bool)
+	resetMatches := 0
+	for _, match := range matches {
+		if match.Week < targetWeek {
+			continue
+		}
+		if match.Status != "scheduled" || match.HomeScore != nil || match.AwayScore != nil {
+			resetMatches++
+			weekSet[match.Week] = true
+		}
+	}
+
+	var weeks []int
+	for week := range weekSet {
+		weeks = append(weeks, week)
+	}
+	sort.Ints(weeks)
+	return resetMatches, weeks
+}
+
+func countCompletedMatches(matches []models.Match) int {
+	count := 0
+	for _, match := range matches {
+		if match.Status == "played" || match.Status == "edited" {
+			count++
+		}
+	}
+	return count
 }

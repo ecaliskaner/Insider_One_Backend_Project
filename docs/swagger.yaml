@@ -144,6 +144,20 @@ info:
   title: Football League Simulation API
   version: "1.0"
 paths:
+  /health:
+    get:
+      description: Returns process liveness status.
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Health check
+      tags:
+      - health
   /league/next-week:
     post:
       description: Simulates the next week's matches and updates state

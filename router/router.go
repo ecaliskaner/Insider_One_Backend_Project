@@ -21,6 +21,9 @@ func NewRouter(handler *handlers.LeagueHandler, db *database.DB) *mux.Router {
 	// API v1 subrouter
 	v1 := r.PathPrefix("/api/v1").Subrouter()
 
+	// GET  /api/v1/health — API-scoped liveness probe
+	v1.HandleFunc("/health", healthHandler.Healthz).Methods(http.MethodGet)
+
 	// GET  /api/v1/league/table — Current standings
 	v1.HandleFunc("/league/table", handler.GetTable).Methods(http.MethodGet)
 

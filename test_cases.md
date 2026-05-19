@@ -59,14 +59,15 @@ DB_PATH=<temp-db> SIM_SEED=42 go run . serve
 | TC-023 | Per-client rate limiter | exhaust one client bucket, then request from another client | first client receives `429`; second client still succeeds | Middleware isolation |
 | TC-024 | Seeded simulation | run same simulation with same `SIM_SEED` | match engine and weather choices are repeatable | Demo reproducibility |
 | TC-025 | Liveness probe | `GET /healthz` | `200 OK`; returns `status: ok` | Platform health |
-| TC-026 | Readiness probe | `GET /readyz` | `200 OK` when database ping succeeds; `503` if storage is unavailable | Platform readiness |
-| TC-027 | Preserve request ID | request with `X-Request-ID` | Response includes the same `X-Request-ID` value | Trace correlation |
-| TC-028 | Generate request ID | request without `X-Request-ID` | Response includes a generated `X-Request-ID` value | Trace correlation |
-| TC-029 | Malformed JSON edit body | `PUT /api/v1/matches/1` with invalid JSON | `400 Bad Request`; problem response explains malformed JSON | Request validation |
-| TC-030 | Wrong edit content type | `PUT /api/v1/matches/1` with `text/plain` | `400 Bad Request`; content type is rejected | Request validation |
-| TC-031 | Edit scheduled match | `PUT /api/v1/matches/1` before it has been played | `400 Bad Request`; only played matches can be edited | Domain validation |
-| TC-032 | Duplicate rollback | repeat `POST /api/v1/league/rollback/2` | `200 OK`; rollback is idempotent and standings remain consistent | Rebuild consistency |
-| TC-033 | Invalid team ID format | `GET /api/v1/teams/not-a-number/metrics` | `400 Bad Request`; team ID must be numeric | Request validation |
+| TC-026 | API-scoped health probe | `GET /api/v1/health` | `200 OK`; returns `status: ok` | API health |
+| TC-027 | Readiness probe | `GET /readyz` | `200 OK` when database ping succeeds; `503` if storage is unavailable | Platform readiness |
+| TC-028 | Preserve request ID | request with `X-Request-ID` | Response includes the same `X-Request-ID` value | Trace correlation |
+| TC-029 | Generate request ID | request without `X-Request-ID` | Response includes a generated `X-Request-ID` value | Trace correlation |
+| TC-030 | Malformed JSON edit body | `PUT /api/v1/matches/1` with invalid JSON | `400 Bad Request`; problem response explains malformed JSON | Request validation |
+| TC-031 | Wrong edit content type | `PUT /api/v1/matches/1` with `text/plain` | `400 Bad Request`; content type is rejected | Request validation |
+| TC-032 | Edit scheduled match | `PUT /api/v1/matches/1` before it has been played | `400 Bad Request`; only played matches can be edited | Domain validation |
+| TC-033 | Duplicate rollback | repeat `POST /api/v1/league/rollback/2` | `200 OK`; rollback is idempotent and standings remain consistent | Rebuild consistency |
+| TC-034 | Invalid team ID format | `GET /api/v1/teams/not-a-number/metrics` | `400 Bad Request`; team ID must be numeric | Request validation |
 
 ## Edge Cases Covered By Automated Tests
 
@@ -88,7 +89,7 @@ DB_PATH=<temp-db> SIM_SEED=42 go run . serve
 | Missing match returns 404 | `TestGetMatch_ReturnsNotFoundForMissingMatch` |
 | Invalid team ID format is rejected | `TestTeamMetrics_RejectsInvalidTeamID` |
 | Per-client rate limiting does not block other clients | `TestRateLimiterMiddleware_IsPerClient` |
-| Health and readiness probes return success when dependencies are available | `TestHealthAndReadinessEndpoints` |
+| Health, API health, and readiness probes return success when dependencies are available | `TestHealthAndReadinessEndpoints` |
 | Readiness returns 503 when the database is unavailable | `TestReadyz_ReturnsUnavailableWithoutDatabase` |
 | Incoming request IDs are preserved | `TestRequestIDHeader_IsReturned`, `TestRequestIDMiddleware_PreservesInboundID` |
 | Missing request IDs are generated | `TestRequestIDMiddleware_GeneratesMissingID` |

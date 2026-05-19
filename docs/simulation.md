@@ -64,3 +64,5 @@ The cache is invalidated whenever league state changes:
 - league reset is performed.
 
 Cached reads return the same response without rerunning the 1,000 simulations.
+
+Cache invalidation also publishes an internal `prediction_cache_invalidated` domain event so logs can show why a cached probability result was discarded.

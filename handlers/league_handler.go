@@ -295,7 +295,8 @@ func (h *LeagueHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.service.Rollback(r.Context(), targetWeek); err != nil {
+	summary, err := h.service.Rollback(r.Context(), targetWeek)
+	if err != nil {
 		WriteProblem(w, r, http.StatusBadRequest, "Rollback Failed", err.Error(), "https://api.insiderfootball.com/errors/rollback-failed")
 		return
 	}
@@ -312,6 +313,7 @@ func (h *LeagueHandler) Rollback(w http.ResponseWriter, r *http.Request) {
 	}
 	respondJSON(w, http.StatusOK, nil, map[string]interface{}{
 		"message":      fmt.Sprintf("Rollback completed to week %d", targetWeek),
+		"summary":      summary,
 		"current_week": currentWeek,
 		"standings":    standings,
 	})

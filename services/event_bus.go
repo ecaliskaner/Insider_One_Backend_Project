@@ -2,17 +2,20 @@ package services
 
 import (
 	"sync"
-
-	"github.com/ecaliskaner/Insider_One_Backend_Project/models"
 )
 
-// MatchFinishedEvent is the payload for the event bus
-type MatchFinishedEvent struct {
-	HomeTeam  models.Team
-	AwayTeam  models.Team
-	HomeGoals int
-	AwayGoals int
-	MatchID   int
+const (
+	EventWeekPlayed                 = "week_played"
+	EventMatchEdited                = "match_edited"
+	EventRollbackCompleted          = "rollback_completed"
+	EventStandingsRebuilt           = "standings_rebuilt"
+	EventPredictionCacheInvalidated = "prediction_cache_invalidated"
+)
+
+// DomainEvent is the payload emitted for internal observability.
+type DomainEvent struct {
+	Name   string                 `json:"name"`
+	Fields map[string]interface{} `json:"fields,omitempty"`
 }
 
 // EventBus implements a simple internal Pub/Sub system
@@ -37,7 +40,7 @@ func (eb *EventBus) Subscribe(topic string) <-chan interface{} {
 	return ch
 }
 
-// Publish sends an event to all subscribers of a topic asynchronously
+// Publish sends an event to all subscribers of a topic without blocking writes.
 func (eb *EventBus) Publish(topic string, data interface{}) {
 	eb.mu.RLock()
 	defer eb.mu.RUnlock()

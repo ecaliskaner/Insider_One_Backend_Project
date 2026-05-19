@@ -62,6 +62,16 @@ type Prediction struct {
 	WinPct   float64 `json:"championship_win_pct"`
 }
 
+// RollbackSummary describes what changed during a rollback operation.
+type RollbackSummary struct {
+	TargetWeek                 int   `json:"target_week"`
+	ResetMatches               int   `json:"reset_matches"`
+	ResetWeeks                 []int `json:"reset_weeks"`
+	StandingsRecalculated      bool  `json:"standings_recalculated"`
+	PredictionCacheInvalidated bool  `json:"prediction_cache_invalidated"`
+	TeamMetricsRebuilt         bool  `json:"team_metrics_rebuilt"`
+}
+
 // MatchRepository defines the interface for match data access
 type MatchRepository interface {
 	GetAll(ctx context.Context) ([]Match, error)
