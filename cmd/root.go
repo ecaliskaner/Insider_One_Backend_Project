@@ -36,4 +36,6 @@ func initConfig() {
 	viper.SetDefault("DB_PATH", "./league.db")
 	viper.SetDefault("SIM_SEED", "")
 	viper.SetDefault("WEATHER_PROVIDER", services.WeatherProviderLocal)
+	viper.SetDefault("TEAM_STRENGTH_PROVIDER", services.TeamStrengthProviderLocal)
+	viper.SetDefault("TRANSFERMARKT_API_BASE_URL", "")
 }

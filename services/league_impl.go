@@ -24,6 +24,7 @@ type LeagueServiceImpl struct {
 	standingRepo models.StandingRepository
 	engine       MatchEngine
 	weather      WeatherAdapter
+	strength     TeamStrengthProvider
 	db           *database.DB
 
 	// Advanced Architecture Features
@@ -35,6 +36,13 @@ type LeagueServiceImpl struct {
 
 // NewLeagueService creates a new LeagueServiceImpl with dependency injection
 func NewLeagueService(db *database.DB, engine MatchEngine, weather WeatherAdapter) *LeagueServiceImpl {
+	return NewLeagueServiceWithStrengthProvider(db, engine, weather, NewLocalTeamStrengthProvider())
+}
+
+func NewLeagueServiceWithStrengthProvider(db *database.DB, engine MatchEngine, weather WeatherAdapter, strength TeamStrengthProvider) *LeagueServiceImpl {
+	if strength == nil {
+		strength = NewLocalTeamStrengthProvider()
+	}
 	eb := NewEventBus()
 	svc := &LeagueServiceImpl{
 		teamRepo:     database.NewTeamRepo(db.Conn),
@@ -44,6 +52,7 @@ func NewLeagueService(db *database.DB, engine MatchEngine, weather WeatherAdapte
 		standingRepo: database.NewStandingRepo(db.Conn),
 		engine:       engine,
 		weather:      weather,
+		strength:     strength,
 		db:           db,
 		eventBus:     eb,
 	}
@@ -86,6 +95,7 @@ func (s *LeagueServiceImpl) runInTx(ctx context.Context, fn func(*LeagueServiceI
 		standingRepo: database.NewStandingRepo(tx),
 		engine:       s.engine,
 		weather:      s.weather,
+		strength:     s.strength,
 		db:           s.db,
 		eventBus:     s.eventBus,
 	}
@@ -154,6 +164,10 @@ func (s *LeagueServiceImpl) PlayNextWeek(ctx context.Context) (*models.WeekResul
 }
 
 func (s *LeagueServiceImpl) playNextWeekLocked(ctx context.Context) (*models.WeekResult, error) {
+	if err := s.refreshTeamStrengths(ctx, nil); err != nil {
+		return nil, fmt.Errorf("refresh team strengths: %w", err)
+	}
+
 	var result *models.WeekResult
 	if err := s.runInTx(ctx, func(txSvc *LeagueServiceImpl, _ database.DBTX) error {
 		weekResult, err := txSvc.playNextWeekInStore(ctx)
@@ -573,6 +587,10 @@ func (s *LeagueServiceImpl) Reset(ctx context.Context) error {
 	s.eventRepo = database.NewEventRepo(s.db.Conn)
 	s.standingRepo = database.NewStandingRepo(s.db.Conn)
 
+	if err := s.refreshTeamStrengths(ctx, nil); err != nil {
+		return fmt.Errorf("refresh team strengths: %w", err)
+	}
+
 	s.invalidatePredictionCache("league_reset")
 
 	return nil
@@ -778,4 +796,33 @@ func countCompletedMatches(matches []models.Match) int {
 		}
 	}
 	return count
+}
+
+func (s *LeagueServiceImpl) refreshTeamStrengths(ctx context.Context, teams []models.Team) error {
+	if s.strength == nil {
+		return nil
+	}
+	if teams == nil {
+		var err error
+		teams, err = s.teamRepo.GetAll(ctx)
+		if err != nil {
+			return err
+		}
+	}
+
+	for _, team := range teams {
+		baseStrength, err := s.strength.BaseStrength(ctx, team)
+		if err != nil {
+			return fmt.Errorf("resolve strength for %s: %w", team.Name, err)
+		}
+		if baseStrength == team.BaseStrength {
+			continue
+		}
+		team.BaseStrength = baseStrength
+		team.CurrentStrength = baseStrength
+		if err := s.teamRepo.Update(ctx, &team); err != nil {
+			return fmt.Errorf("persist strength for %s: %w", team.Name, err)
+		}
+	}
+	return nil
 }

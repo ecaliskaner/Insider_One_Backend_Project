@@ -34,6 +34,17 @@ The Open-Meteo adapter is intentionally defensive:
 - local fallback when a city is unknown or the provider returns an error;
 - normalized output so the match engine stays decoupled from external API response details.
 
+## Team Strength Provider
+
+Team strength is resolved behind a provider interface before simulations run. The default provider is `local`, which keeps seeded strengths unchanged.
+
+Optional modes:
+
+- `TEAM_STRENGTH_PROVIDER=market-value`: derives a deterministic base strength from each team's local market value.
+- `TEAM_STRENGTH_PROVIDER=transfermarkt`: calls a self-hosted Transfermarkt-compatible API, extracts a market value from the response, maps it to a base strength, caches the result, and falls back to local seeded strength on any provider error.
+
+The Transfermarkt mode is intentionally opt-in because scraper-backed APIs can be rate-limited or unstable. Reviewers can run the project without this dependency, while the adapter still demonstrates timeout, cache, fallback, and external DTO normalization patterns.
+
 ## Simulation Loop
 
 The service runs 1,000 Monte Carlo simulations. In each simulation:

@@ -412,6 +412,10 @@ const docTemplate = `{
         "handlers.ProblemDetails": {
             "type": "object",
             "properties": {
+                "code": {
+                    "description": "Stable machine-readable error code",
+                    "type": "string"
+                },
                 "detail": {
                     "description": "Human-readable explanation specific to this occurrence",
                     "type": "string"

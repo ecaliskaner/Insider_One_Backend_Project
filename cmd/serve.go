@@ -26,6 +26,8 @@ var serveCmd = &cobra.Command{
 		port := viper.GetString("PORT")
 		simSeed := viper.GetString("SIM_SEED")
 		weatherProvider := viper.GetString("WEATHER_PROVIDER")
+		strengthProviderName := viper.GetString("TEAM_STRENGTH_PROVIDER")
+		transfermarktBaseURL := viper.GetString("TRANSFERMARKT_API_BASE_URL")
 
 		// Initialize database (only connects and auto-migrates if enabled)
 		db, err := database.NewDB(dbPath)
@@ -48,7 +50,9 @@ var serveCmd = &cobra.Command{
 		}
 		weather := services.NewWeatherAdapterByProvider(weatherProvider, weatherAdapter)
 		log.Printf("Using weather provider: %s", weatherProvider)
-		leagueService := services.NewLeagueService(db, matchEngine, weather)
+		strengthProvider := services.NewTeamStrengthProviderByProvider(strengthProviderName, transfermarktBaseURL)
+		log.Printf("Using team strength provider: %s", strengthProviderName)
+		leagueService := services.NewLeagueServiceWithStrengthProvider(db, matchEngine, weather, strengthProvider)
 
 		// Initialize handlers
 		leagueHandler := handlers.NewLeagueHandler(leagueService)
